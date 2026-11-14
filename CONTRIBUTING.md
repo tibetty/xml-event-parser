@@ -81,6 +81,40 @@ The release job is idempotent: publish skips a version already on the registry
 and the tag step skips an existing tag, so a run that failed part-way can be
 re-run with **Run workflow** on `release.yml`.
 
+## Implementation notes
+
+Details that are useful here but not in the README:
+
+- **Attributes are flat on the node**, one object per element, rather than a
+  nested `attributes` map. That is what keeps a parsed document smaller than
+  `txml`'s (see the retained-heap column in `bench/RESULTS.md`). The cost is
+  that an attribute named `tagName`, `children` or `text` is shadowed.
+- **Event names are lazy.** The scanner only builds `<path>` strings for paths
+  that have a listener (`watchedPaths` / `watchedChildren` / `watchedTopLevel`),
+  and only counts open listeners when deciding whether to emit opens, so
+  subscribing to `</osm.node>` costs nothing for the `</osm.nd>` leaves.
+- **Streaming is the same code path as `parse()`.** `parse(xml)` is
+  `write(xml).end()`; `test/xmlparser.test.ts` parses a document at every split
+  point and in 1-13 byte chunks to keep that true.
+- **Compaction keeps from the innermost frame that can still need its text.**
+  A frame with a child never reads its text start again (`hasChild`), which is
+  what lets consumed input be dropped. Without that check the buffer never
+  shrinks and each `write()` becomes a quadratic string append - 4 KiB chunks
+  were 12x slower than one string before the fix.
+- **Entity decoding is a manual scan**, not `String.replace` with a callback:
+  ~2.5x faster on attribute-heavy shapes (the `text` benchmark went from 325 to
+  442 MB/s).
+- **Benchmark corpus**: `bench/generate.mjs` emits six shapes, each isolating one
+  cost - per element (`leaf-storm`), per child (`tag-storm`), per byte of text
+  (`text`), nesting depth (`deep`), and realistic mixes (`osm-dense`,
+  `boundary`). `bench/memory.mjs` covers the file-bigger-than-memory case with a
+  512 MB heap cap per child process.
+- **Origin**: extracted from `osm2geojson-lite`, where this parser served until
+  2.2.0 and was replaced by a purpose-built OSM scanner. The public naming
+  changed (`children`/`tagName`/`text` instead of `$innerNodes`/`$tag`/
+  `$innerText`), and the `new Function`-based conditioned-path events were
+  removed: filtering belongs in the listener, and `eval` is a CSP liability.
+
 ## License
 
 MIT.
