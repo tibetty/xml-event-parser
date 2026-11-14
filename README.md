@@ -29,7 +29,7 @@ gzipped, zero dependencies, and no `node:*` imports in the core entry.
 ## 240 MB in one second
 
 A generated JUnit report, each parser in its own process capped at 512 MB of
-heap - a typical CI container ([reproduce it](#development)):
+heap - a typical CI container ([reproduce it](CONTRIBUTING.md#development)):
 
 | parser | 60 MB report | 240 MB report |
 | --- | --- | --- |
@@ -235,66 +235,14 @@ public naming (`children`/`tagName`/`text` instead of `$innerNodes`/`$tag`/
 `$innerText`) and the removal of the `new Function`-based conditioned-path
 events.
 
-Published as `xml-event-parser` (current version on npm). Releases are cut by
-changing `version` on `main`: `release.yml` publishes through npm trusted
-publishing (OIDC, with provenance), tags `v<version>` and creates the GitHub
-release. The job runs only when the repository variable
-`NPM_TRUSTED_PUBLISHER` is `true`.
+Published on npm as `xml-event-parser`, with provenance attestations from
+GitHub Actions.
 
-## Development
+## Contributing
 
-```sh
-npm ci
-npm test              # unit tests
-npm run typecheck
-npm run build         # dist/index.mjs, dist/index.cjs, dist/index.d.ts
-npm run bench:data    # generate ~27 MiB benchmark corpus (gitignored)
-npm run bench:memory  # JUnit memory/time table under a 512 MB heap cap
-npm run bench         # compare against txml / sax / htmlparser2 / fast-xml-parser
-```
-
-## Releasing
-
-`release.yml` publishes with npm trusted publishing (OIDC) and is gated on the
-repository variable `NPM_TRUSTED_PUBLISHER`, which stays unset until a trusted
-publisher exists.
-
-One-time bootstrap, because npm cannot attach a trusted publisher to a package
-that does not exist yet:
-
-1. Publish the first version locally:
-
-   ```sh
-   npm login
-   npm publish --access public
-   ```
-
-2. npmjs.com -> Packages -> `xml-event-parser` -> Settings -> **Trusted
-   publishing** -> GitHub Actions:
-
-   | field | value |
-   | --- | --- |
-   | Organization or user | `tibetty` |
-   | Repository | `xml-event-parser` |
-   | Workflow filename | `release.yml` (filename only, case-sensitive) |
-   | Environment name | leave empty |
-   | Allowed actions | tick **npm publish** |
-
-   Configurations created after September 2026 default to `npm stage publish`
-   only, so `npm publish` has to be ticked explicitly. The first publish through
-   that workflow must complete within **two days**, or the configuration expires.
-
-3. GitHub -> Settings -> Secrets and variables -> Actions -> Variables: add
-   `NPM_TRUSTED_PUBLISHER` = `true`.
-
-4. Optional hardening, once a workflow publish has succeeded: npmjs.com ->
-   package Settings -> Publishing access -> *Require two-factor authentication
-   and disallow tokens*.
-
-After that, changing `version` in `package.json` on `main` publishes through
-`release.yml`, tags `v<version>` and creates the GitHub release. npm generates
-provenance automatically only for a public repository; from a private one the
-package is published without an attestation.
+Development setup, the test and benchmark commands, and the release process
+(including the npm trusted-publishing bootstrap) are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
