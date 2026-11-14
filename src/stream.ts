@@ -14,12 +14,12 @@ export interface XmlStreamOptions extends XmlParserOptions {
     event: string;
 }
 
-/** `'</a.b>'` / `'a.b'` -> `'a.b'` (the parser normalises for us, this is only for validation). */
-function requireEvent(event: unknown): string {
+/** Accept both the event form (`'</a.b>'`) and the bare path (`'a.b'`). */
+function toEventPath(event: unknown): string {
     if (typeof event !== 'string' || event.length === 0) {
         throw new TypeError('createStream() requires { event }, e.g. { event: "</root.item>" }');
     }
-    return event;
+    return event.charCodeAt(0) === 60 /* '<' */ ? event : '</' + event + '>';
 }
 
 /**
@@ -45,7 +45,7 @@ function requireEvent(event: unknown): string {
  * runtimes that expose no Node built-ins.
  */
 export function createStream(options: XmlStreamOptions): Transform {
-    const event = requireEvent(options && options.event);
+    const event = toEventPath(options && options.event);
     const parser = new XmlParser({ ...options, progressive: true, retain: 'none', keep: [event] });
     const decoder = new StringDecoder('utf8');
 

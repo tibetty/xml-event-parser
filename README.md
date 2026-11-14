@@ -40,18 +40,10 @@ The file grows 4x; the heap does not.
 npm install xml-event-parser
 ```
 
-## Quick start
+## Typical usage
 
-### Tree
-
-```js
-import { XmlParser } from 'xml-event-parser';
-
-const roots = new XmlParser().parse(xml);
-console.log(roots[0].tagName, roots[0].children);
-```
-
-### Stream (Node)
+Stream a report and act on each element. This is the case the library is built
+for: the file can be any size, memory stays flat.
 
 ```js
 import { createReadStream } from 'node:fs';
@@ -67,7 +59,7 @@ await pipeline(
         write(testcase, _encoding, done) {
             // testcase is complete: attributes plus <failure>/<system-out> children
             if (testcase.children?.some((child) => child.tagName === 'failure')) {
-                console.log(testcase.name);
+                console.log(`${testcase.classname} › ${testcase.name}`);
             }
             done();
         },
@@ -75,7 +67,12 @@ await pipeline(
 );
 ```
 
-### Anywhere (no Node built-ins)
+> **The path is the full chain from the document root.** For
+> `<testsuites><testsuite><testcase>` the event is
+> `'</testsuites.testsuite.testcase>'`; `'</testcase>'` matches nothing.
+> `event` also accepts the bare path (`'testsuites.testsuite.testcase'`).
+
+Without Node streams - a Worker, Deno, Bun or a plain callback loop:
 
 ```js
 const parser = new XmlParser({
@@ -92,9 +89,18 @@ for await (const chunk of stream) {
 parser.end();
 ```
 
-Runnable examples: [`examples/junit.mjs`](examples/junit.mjs),
-[`examples/sitemap.mjs`](examples/sitemap.mjs),
-[`examples/gpx.mjs`](examples/gpx.mjs).
+When the document fits in memory, skip streaming:
+
+```js
+import { XmlParser } from 'xml-event-parser';
+
+const roots = new XmlParser().parse(xml);
+console.log(roots[0].tagName, roots[0].children);
+```
+
+Runnable examples, one per common job: [`examples/junit.mjs`](examples/junit.mjs)
+(test report), [`examples/sitemap.mjs`](examples/sitemap.mjs),
+[`examples/gpx.mjs`](examples/gpx.mjs) (track length).
 
 ## API
 
@@ -144,7 +150,9 @@ new XmlParser({
 | `'<osm.way>'` | when a `<way>` inside `<osm>` opens |
 | `'</osm.way>'` | when it closes, with `children` populated |
 
-The path is the dotted chain of ancestors. Filter inside the listener:
+The path is the dotted chain from the document root, not just the element name:
+`'</osm.way>'`, never `'</way>'`. The same applies to `keep`. Filter inside the
+listener:
 
 ```js
 parser.on('</osm.way>', (way) => {

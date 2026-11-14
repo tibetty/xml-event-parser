@@ -67,6 +67,11 @@ describe('createStream', () => {
         expect(items.map((item) => item.name)).toEqual(['a', 'b']);
     });
 
+    it('accepts the bare path as well as the event form', async () => {
+        const items = await collect([JUNIT], { event: 'testsuites.testsuite.testcase' });
+        expect(items.map((item) => item.name)).toEqual(['a', 'b']);
+    });
+
     it('requires an event path', () => {
         expect(() => createStream({} as any)).toThrow(/requires \{ event \}/);
     });
