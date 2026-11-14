@@ -1,6 +1,6 @@
 {
   "name": "xml-event-parser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tiny dependency-free XML parser with a tree and path-based events in one pass",
   "repository": {
     "type": "git",
