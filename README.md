@@ -12,7 +12,7 @@ single pass.
   Chunks may split anywhere - mid-tag, mid-attribute, inside CDATA or a comment -
   and `retain` decides whether the parser keeps the tree, one root, or nothing,
   so a 60 MiB document can be parsed with ~0 MiB of retained heap.
-- **Small**: 6.1 KiB minified, 2.2 KiB gzipped (ESM), streaming included.
+- **Small**: 6.1 KiB minified, 2.1 KiB gzipped (ESM), streaming included.
 - **Fastest on every shape we benchmarked**: ~1.9x `txml`'s throughput on
   OSM-style documents at ~30% less retained heap, and ahead of `txml` on
   text/entity-heavy input too; ~1.6x `htmlparser2`'s on element callbacks. See
