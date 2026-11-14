@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="xml-event-parser example">
+  <trk><name>Morning loop</name><trkseg>
+    <trkpt lat="48.137154" lon="11.576124"><ele>519</ele><time>2026-11-14T06:12:00Z</time></trkpt>
+    <trkpt lat="48.137510" lon="11.576900"><ele>521</ele><time>2026-11-14T06:12:20Z</time></trkpt>
+    <trkpt lat="48.138020" lon="11.577650"><ele>524</ele><time>2026-11-14T06:12:41Z</time></trkpt>
+    <trkpt lat="48.138540" lon="11.578100"><ele>522</ele><time>2026-11-14T06:13:03Z</time></trkpt>
+  </trkseg></trk>
+</gpx>

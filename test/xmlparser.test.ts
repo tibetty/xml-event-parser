@@ -395,3 +395,33 @@ describe('streaming input', () => {
             .toEqual([{ tagName: 'b', children: [{ tagName: 'c' }] }]);
     });
 });
+
+describe('retain: none with keep', () => {
+    it('emits complete subtrees for the kept path and drops the rest', () => {
+        const parser = new XmlParser({
+            progressive: true,
+            retain: 'none',
+            keep: ['testsuites.testsuite.testcase'],
+        });
+        const cases: any[] = [];
+        parser.on('</testsuites.testsuite.testcase>', (node) => cases.push(node));
+        parser.write('<testsuites><testsuite><testcase name="a"><failure message="boom">trace</failure>'
+            + '<system-out>log</system-out></testcase><testcase name="b"/></testsuite></testsuites>');
+        expect(parser.end()).toEqual([]);
+        expect(cases).toHaveLength(2);
+        expect(cases[0].name).toBe('a');
+        expect(cases[0].children).toHaveLength(2);
+        expect(cases[0].children[0].tagName).toBe('failure');
+        expect(cases[0].children[0].text).toBe('trace');
+        expect(cases[0].children[1].text).toBe('log');
+        expect(cases[1].children).toBeUndefined();
+    });
+
+    it('accepts the event spelling of the path', () => {
+        const parser = new XmlParser({ progressive: true, retain: 'none', keep: ['</r.item>'] });
+        const items: any[] = [];
+        parser.on('</r.item>', (node) => items.push(node));
+        parser.parse('<r><item><child>text</child></item></r>');
+        expect(items[0].children[0].tagName).toBe('child');
+    });
+});

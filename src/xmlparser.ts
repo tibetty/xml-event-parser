@@ -112,6 +112,19 @@ const TAB = 9;
 const LF = 10;
 const CR = 13;
 
+/** `'</a.b>'` and `'a.b'` both normalise to `'a.b'`. */
+function normalizePath(path: string): string {
+    let start = 0;
+    let end = path.length;
+    if (path.charCodeAt(0) === LT) {
+        start = path.charCodeAt(1) === SLASH ? 2 : 1;
+    }
+    if (path.charCodeAt(end - 1) === GT) {
+        end--;
+    }
+    return path.slice(start, end);
+}
+
 function isSpace(c: number): boolean {
     return c === SPACE || c === TAB || c === LF || c === CR;
 }
@@ -120,6 +133,8 @@ interface Frame {
     node: XmlNode;
     fullTag: string;
     textStart: number;
+    /** Retained subtree: this element or an ancestor matched `keep`. */
+    keep?: boolean;
     /**
      * Whether a child element was parsed inside this one. Text is only kept for
      * elements without children, and the flag is what lets the scanner drop
@@ -147,6 +162,15 @@ export interface XmlParserOptions {
      *   nobody listens for is parsed and discarded.
      */
     retain?: Retain;
+    /**
+     * Under `retain: 'none'`, elements whose dotted path is listed here keep
+     * their subtree (children and text), so a streamed element arrives
+     * complete instead of as a bare tag. Paths use the event form without
+     * brackets: `'testsuites.testsuite.testcase'`.
+     *
+     * Memory stays bounded by the largest matched subtree, not the document.
+     */
+    keep?: string[];
 }
 
 interface OpenTag {
@@ -160,6 +184,7 @@ export class XmlParser {
     private queryParent: boolean = false;
     private progressive: boolean = false;
     private retain: Retain = 'all';
+    private keepPaths: Set<string> = new Set();
     private parentMap: WeakMap<XmlNode, XmlNode> = new WeakMap();
     private evtListeners: { [k: string]: XmlListener[] } = {};
     /**
@@ -194,6 +219,11 @@ export class XmlParser {
             this.progressive = opts.progressive === true;
             if (opts.retain) {
                 this.retain = opts.retain;
+            }
+            if (opts.keep) {
+                for (const path of opts.keep) {
+                    this.keepPaths.add(normalizePath(path));
+                }
             }
         }
     }
@@ -284,8 +314,8 @@ export class XmlParser {
      * `parentNode === undefined` means the element is top-level (a root), which
      * `retain: 'root'` drops after emitting it.
      */
-    private attach(node: XmlNode, parentNode: XmlNode | undefined): void {
-        if (this.retain === 'none') {
+    private attach(node: XmlNode, parentNode: XmlNode | undefined, keepParent: boolean): void {
+        if (this.retain === 'none' && !keepParent) {
             return;
         }
         if (parentNode === undefined) {
@@ -352,7 +382,7 @@ export class XmlParser {
                     this.emit('</' + frame.fullTag + '>', node, parentNode);
                 }
 
-                this.attach(node, parentNode);
+                this.attach(node, parentNode, parentFrame ? parentFrame.keep === true : false);
                 if (parentFrame) {
                     parentFrame.hasChild = true;
                 }
@@ -434,7 +464,7 @@ export class XmlParser {
                         this.emit('</' + fullTag + '>', node, parentNode);
                     }
                 }
-                this.attach(node, parentNode);
+                this.attach(node, parentNode, this.top ? this.top.keep === true : false);
                 if (this.top) {
                     this.top.hasChild = true;
                 }
@@ -447,7 +477,8 @@ export class XmlParser {
             if (hasOpenListeners && this.watchedPaths.has(fullTag)) {
                 this.emit('<' + fullTag + '>', node, parentNode);
             }
-            const frame: Frame = { node, fullTag, textStart: i };
+            const keep = (this.top !== undefined && this.top.keep === true) || this.keepPaths.has(fullTag);
+            const frame: Frame = { node, fullTag, textStart: i, keep };
             this.stack.push(frame);
             this.top = frame;
         }
@@ -567,7 +598,7 @@ export class XmlParser {
             }
             const parentFrame = this.stack.length ? this.stack[this.stack.length - 1] : this.rootOwner;
             const parentNode = parentFrame ? parentFrame.node : undefined;
-            this.attach(node, parentNode);
+            this.attach(node, parentNode, parentFrame ? parentFrame.keep === true : false);
         }
     }
 

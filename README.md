@@ -1,35 +1,96 @@
 xml-event-parser
 ================
 
-A tiny XML parser with a document tree and path-based events, produced in a
-single pass.
+**Stream XML without loading it.** A tiny parser that gives you a document tree
+and path-based events in one pass: constant heap on a 240 MB CI report, 2.2 KiB
+gzipped, zero dependencies, and no `node:*` imports in the core entry.
 
-- **Zero dependencies**, no DOM, no `node:*` imports, no `eval`.
-- **One pass, two views**: every element is available as a tree node and as an
-  `open`/`close` event keyed by its dotted path, so a consumer can convert while
-  parsing without a second traversal.
-- **Streaming**: feed `write(chunk)` from a file or socket and call `end()`.
-  Chunks may split anywhere - mid-tag, mid-attribute, inside CDATA or a comment -
-  and `retain` decides whether the parser keeps the tree, one root, or nothing,
-  so a 60 MiB document can be parsed with ~0 MiB of retained heap.
-- **Small**: 6.1 KiB minified, 2.1 KiB gzipped (ESM), streaming included.
-- **Fastest on every shape we benchmarked**: ~1.9x `txml`'s throughput on
-  OSM-style documents at ~30% less retained heap, and ahead of `txml` on
-  text/entity-heavy input too; ~1.6x `htmlparser2`'s on element callbacks. See
-  [Benchmarks](#benchmarks).
+- **Bounded memory**: `retain: 'none'` plus a path subscription keeps only the
+  element being read. 240 MB in, 81 MiB of RSS.
+- **Fast**: ~3.7x `sax` and ~4x `fast-xml-parser` on the same report, and faster
+  than `txml` on every shape we benchmark ([numbers](bench/RESULTS.md)).
+- **Two views, one pass**: a tree node and an `open`/`close` event per element -
+  no second traversal, no DOM.
+- **Small and portable**: 6.4 KiB minified / 2.2 KiB gzipped, zero dependencies,
+  no `eval`, works in Node, browsers and edge runtimes (the Node adapter is a
+  separate `xml-event-parser/stream` entry).
+
+## When to use this
+
+| your job | use |
+| --- | --- |
+| Read a file bigger than memory: CI/test reports (JUnit, SARIF, coverage), sitemaps, GPX/KML tracks, OSM extracts | **this**, `xml-event-parser/stream` |
+| Pick elements while streaming without writing a SAX state machine | **this**, path events |
+| Parse occasionally in a browser or Worker where a 20 KiB parser is too much | **this**, core entry (2.2 KiB) |
+| Turn a small config XML into a plain object | `fast-xml-parser` or `xml2js` (richer object mapping) |
+| DOM semantics: namespaces, XPath, mutation | `@xmldom/xmldom` |
+| Zero allocation, hand-tuned callbacks, no tree at all | `sax` (slightly less memory than ours, ~3.7x slower here) |
+
+## 240 MB in one second
+
+A generated JUnit report, each parser in its own process capped at 512 MB of
+heap - a typical CI container ([reproduce it](#development)):
+
+| parser | 60 MB report | 240 MB report |
+| --- | --- | --- |
+| **xml-event-parser** | **0.27 s, 65 MiB** | **1.03 s, 81 MiB** |
+| sax | 0.96 s, 67 MiB | 3.80 s, 79 MiB |
+| fast-xml-parser | 1.52 s, 637 MiB | **out of memory** |
+
+The file grows 4x; the heap does not. `fast-xml-parser` builds a tree, so it
+needs roughly 7-11x the file size and dies on the larger report.
+
+## Quick start
+
+```sh
+npm install xml-event-parser
+```
+
+Tree, when the document fits:
 
 ```js
 import { XmlParser } from 'xml-event-parser';
 
-const parser = new XmlParser({ progressive: true });
-
-parser.on('</osm.way>', (way) => {
-    // way.tagName === 'way', way.id, way.version, way.children ...
-    console.log(way.id, way.children?.length ?? 0);
-});
-
-const roots = parser.parse(xml);
+const roots = new XmlParser().parse(xml);
+// roots[0].tagName, roots[0].children, roots[0].text, attributes are flat
 ```
+
+Stream, when it does not:
+
+```js
+import { createReadStream } from 'node:fs';
+import { Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createStream } from 'xml-event-parser/stream';
+
+await pipeline(
+    createReadStream('junit.xml'),
+    createStream({ event: '</testsuites.testsuite.testcase>' }),
+    new Writable({
+        objectMode: true,
+        write(testcase, _encoding, done) {
+            // complete element: attributes + <failure>/<system-out> children
+            if (testcase.children?.some((child) => child.tagName === 'failure')) {
+                console.log(testcase.name);
+            }
+            done();
+        },
+    }),
+);
+```
+
+Without Node streams, `write()`/`end()` work anywhere:
+
+```js
+const parser = new XmlParser({ progressive: true, retain: 'none', keep: ['testsuites.testsuite.testcase'] });
+parser.on('</testsuites.testsuite.testcase>', (testcase) => { /* ... */ });
+for await (const chunk of response.body) parser.write(chunk);  // no node: imports
+parser.end();
+```
+
+Runnable examples: [`examples/junit.mjs`](examples/junit.mjs),
+[`examples/sitemap.mjs`](examples/sitemap.mjs),
+[`examples/gpx.mjs`](examples/gpx.mjs) - `node examples/junit.mjs`.
 
 ## Node shape
 
@@ -87,6 +148,20 @@ Measured on a 60 MiB document (ten concatenated extracts, 327k elements):
 327k elements. Without listeners, `retain: 'none'` still parses - it just throws
 the result away.
 
+Under `retain: 'none'`, `keep` restores the subtree of the elements you actually
+want, so a streamed element is complete rather than a bare tag:
+
+```js
+new XmlParser({
+    progressive: true,
+    retain: 'none',
+    keep: ['testsuites.testsuite.testcase'],   // 'testsuites.testsuite.testcase' or '</testsuites.testsuite.testcase>'
+});
+```
+
+Memory is then the largest matched element, not the document. `createStream`
+sets this up for you from its `event` path.
+
 ## Events
 
 | form | fires |
@@ -111,6 +186,7 @@ parser.on('</osm.way>', (way) => {
 | `progressive` | `false` | emit events. Without it, `parse()` only builds the tree |
 | `queryParent` | `false` | track parents so `parser.getParent(node)` works (costs a `WeakMap`) |
 | `retain` | `'all'` | what survives an element: `'all'`, `'root'` or `'none'` (see [Streaming](#streaming)) |
+| `keep` | `[]` | under `retain: 'none'`, dotted paths whose elements keep their subtree |
 
 `parse(xml, parent?, dir?)` also accepts an existing node to attach the parsed
 roots to, and a dotted path prefix used when building event names.
@@ -159,10 +235,11 @@ public naming (`children`/`tagName`/`text` instead of `$innerNodes`/`$tag`/
 `$innerText`) and the removal of the `new Function`-based conditioned-path
 events.
 
-Not published yet. The release workflow publishes only when the repository
-variable `NPM_TRUSTED_PUBLISHER` is `true`; before that, a release is published
-locally because npm cannot configure a trusted publisher for a package that does
-not exist yet.
+Published as `xml-event-parser` (current version on npm). Releases are cut by
+changing `version` on `main`: `release.yml` publishes through npm trusted
+publishing (OIDC, with provenance), tags `v<version>` and creates the GitHub
+release. The job runs only when the repository variable
+`NPM_TRUSTED_PUBLISHER` is `true`.
 
 ## Development
 
@@ -172,6 +249,7 @@ npm test              # unit tests
 npm run typecheck
 npm run build         # dist/index.mjs, dist/index.cjs, dist/index.d.ts
 npm run bench:data    # generate ~27 MiB benchmark corpus (gitignored)
+npm run bench:memory  # JUnit memory/time table under a 512 MB heap cap
 npm run bench         # compare against txml / sax / htmlparser2 / fast-xml-parser
 ```
 
