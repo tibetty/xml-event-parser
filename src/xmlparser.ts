@@ -1,19 +1,19 @@
 /**
- * Whether an event carries a trailing condition expression, written as
- * `<path[expr]>`. The cheap `[` check skips the regex for the common
- * unconditioned events.
+ * One parsed element.
+ *
+ * Attributes are copied onto the node as own properties (flat, so a document
+ * costs one object per element), which is why the type carries an index
+ * signature. `text` is set only for elements without child elements.
  */
-function conditioned(evt: string): boolean {
-    return evt.indexOf('[') >= 0 && /^(.+?)\[(.+?)\]>$/.test(evt);
+export interface XmlNode {
+    tagName: string;
+    children?: XmlNode[];
+    text?: string;
+    [attribute: string]: any;
 }
 
-function parseEvent(evt: string): { evt: string, exp?: string } {
-    const match = /^(.+?)\[(.+?)\]>$/g.exec(evt);
-    if (match) {
-        return { evt: match[1] + '>', exp: match[2] };
-    }
-    return { evt };
-}
+/** Listener signature for the path-based events. */
+export type XmlListener = (node: XmlNode, parent?: XmlNode) => void;
 
 const XML_ENTITY = /&(#[xX][0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g;
 
@@ -44,11 +44,6 @@ export function decodeEntities(value: string): string {
     });
 }
 
-function genConditionFunc(cond: string): (node: { [k: string]: any }) => boolean {
-    const body = 'return ' + cond.replace(/(\$.+?)(?=[=!.])/g, 'node.$&') + ';';
-    return new Function('node', body) as (node: { [k: string]: any }) => boolean;
-}
-
 // character codes used by the scanner
 const LT = 60;        // <
 const GT = 62;        // >
@@ -68,7 +63,7 @@ function isSpace(c: number): boolean {
 }
 
 interface Frame {
-    node: { [k: string]: any };
+    node: XmlNode;
     fullTag: string;
     textStart: number;
 }
@@ -106,12 +101,12 @@ export class XmlParser {
 
     /**
      * Scan an XML string in a single pass, maintaining a stack of open elements,
-     * building a `$tag`/attribute/`$innerNodes` node tree and emitting
+     * building a `tagName`/attribute/`children` node tree and emitting
      * progressive `<path>` / `</path>` events as elements open and close.
      *
      * @param xml - the XML source to scan.
      * @param parent - optional pre-existing node that owns the parsed content;
-     * when supplied, top-level nodes attach to its `$innerNodes` instead of being
+     * when supplied, top-level nodes attach to its `children` instead of being
      * returned as roots.
      * @param dir - optional dotted tag-path prefix applied to emitted event names.
      * @returns the top-level nodes (empty when a `parent` owns them).
@@ -155,9 +150,9 @@ export class XmlParser {
                 const parentFrame = stack.length ? stack[stack.length - 1] : rootOwner;
                 const parentNode = parentFrame ? parentFrame.node : undefined;
 
-                if (!node.$innerNodes && lt > frame.textStart) {
+                if (!node.children && lt > frame.textStart) {
                     const raw = xml.slice(frame.textStart, lt);
-                    node.$innerText = raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
+                    node.text = raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
                 }
 
                 if (progressive && this.watchedPaths.has(frame.fullTag)) {
@@ -165,11 +160,11 @@ export class XmlParser {
                 }
 
                 if (parentNode) {
-                    const inner = parentNode.$innerNodes;
+                    const inner = parentNode.children;
                     if (inner) {
                         inner.push(node);
                     } else {
-                        parentNode.$innerNodes = [node];
+                        parentNode.children = [node];
                     }
                 } else {
                     roots.push(node);
@@ -207,7 +202,7 @@ export class XmlParser {
                 j++;
             }
             const tag = xml.slice(i, j);
-            const node: { [k: string]: any } = { $tag: tag };
+            const node: XmlNode = { tagName: tag };
 
             // parse attributes up to the closing '>' (quote-aware)
             let selfClose = false;
@@ -284,11 +279,11 @@ export class XmlParser {
                     }
                 }
                 if (parentNode) {
-                    const inner = parentNode.$innerNodes;
+                    const inner = parentNode.children;
                     if (inner) {
                         inner.push(node);
                     } else {
-                        parentNode.$innerNodes = [node];
+                        parentNode.children = [node];
                     }
                 } else {
                     roots.push(node);
@@ -318,38 +313,31 @@ export class XmlParser {
     }
 
     /**
-     * Register a listener for an event. The event may carry a trailing
-     * JavaScript condition (`<path[expr]>`) that must evaluate truthy on the
-     * node for the listener to fire.
+     * Register a listener for an event.
+     *
+     * Event names are the dotted tag path, prefixed with `<` for an opening
+     * element and `</` for a closing one: `'<osm.way>'`, `'</osm.way>'`.
+     * Filter inside the listener - `if (node.tagName !== 'way') return;` - and
+     * an unobserved path costs nothing, because the scanner skips building
+     * event names nobody listens for.
      */
-    public addListener(evt: string, func: (node: { [k: string]: any }, parent?: { [k: string]: any }) => void) {
-        if (conditioned(evt)) {
-            const ev = parseEvent(evt);
-            if (ev.exp) {
-                (func as { [k: string]: any }).condition = genConditionFunc(ev.exp);
-            }
-            evt = ev.evt;
-        }
+    public addListener(evt: string, func: XmlListener) {
         this.$addListener(evt, func);
     }
 
-    public removeListener(evt: string, func: (node: { [k: string]: any }, parent?: { [k: string]: any }) => void) {
-        if (conditioned(evt)) {
-            const ev = parseEvent(evt);
-            evt = ev.evt;
-        }
+    public removeListener(evt: string, func: XmlListener) {
         this.$removeListener(evt, func);
     }
 
-    public on(evt: string, func: (node: { [k: string]: any }, parent?: { [k: string]: any }) => void) {
+    public on(evt: string, func: XmlListener) {
         this.addListener(evt, func);
     }
 
-    public off(evt: string, func: (node: { [k: string]: any }, parent?: { [k: string]: any }) => void) {
+    public off(evt: string, func: XmlListener) {
         this.removeListener(evt, func);
     }
 
-    private $addListener(evt: string, func: (node: { [k: string]: any }, parent?: { [k: string]: any }) => void) {
+    private $addListener(evt: string, func: XmlListener) {
         const funcs = this.evtListeners[evt];
         if (funcs) {
             funcs.push(func);
@@ -378,7 +366,7 @@ export class XmlParser {
         }
     }
 
-    private $removeListener(evt: string, func: (node: { [k: string]: any }, parent?: { [k: string]: any }) => void) {
+    private $removeListener(evt: string, func: XmlListener) {
         const funcs = this.evtListeners[evt];
         let idx = -1;
         if (funcs) {
@@ -392,17 +380,11 @@ export class XmlParser {
         }
     }
 
-    private emit(evt: string, node: { [k: string]: any }, parentNode?: { [k: string]: any }) {
+    private emit(evt: string, node: XmlNode, parentNode?: XmlNode) {
         const funcs = this.evtListeners[evt];
         if (funcs) {
-            for (const func of funcs) {
-                if (func.condition) {
-                    if (func.condition(node, parentNode) === true) {
-                        func(node, parentNode);
-                    }
-                } else {
-                    func(node, parentNode);
-                }
+            for (let i = 0; i < funcs.length; i++) {
+                funcs[i](node, parentNode);
             }
         }
     }

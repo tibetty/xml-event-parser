@@ -51,7 +51,7 @@ const walkOurs = (roots) => {
     while (stack.length > 0) {
         const node = stack.pop();
         elements++;
-        const children = node.$innerNodes;
+        const children = node.children;
         if (children !== undefined) {
             for (let i = 0; i < children.length; i++) stack.push(children[i]);
         }

@@ -34,43 +34,43 @@ describe('XmlParser structural parsing', () => {
         const roots = parse('<root a="1" b=\'2\'><child x="&amp;"/><empty/></root>');
         expect(roots).toHaveLength(1);
         const root = roots[0];
-        expect(root.$tag).toBe('root');
+        expect(root.tagName).toBe('root');
         expect(root.a).toBe('1');
         expect(root.b).toBe('2');
-        expect(root.$innerNodes).toHaveLength(2);
-        expect(root.$innerNodes[0].$tag).toBe('child');
-        expect(root.$innerNodes[0].x).toBe('&');
-        expect(root.$innerNodes[1].$tag).toBe('empty');
+        expect(root.children).toHaveLength(2);
+        expect(root.children[0].tagName).toBe('child');
+        expect(root.children[0].x).toBe('&');
+        expect(root.children[1].tagName).toBe('empty');
     });
 
     it('returns multiple roots and ignores trailing text', () => {
         const roots = parse('<a/>text<b/>');
-        expect(roots.map((node: any) => node.$tag)).toEqual(['a', 'b']);
+        expect(roots.map((node: any) => node.tagName)).toEqual(['a', 'b']);
         expect(parse('<a/>trailing text')).toHaveLength(1);
     });
 
     it('appends multiple non-self-closing children to a parent', () => {
         const roots = parse('<root><a></a><b></b></root>');
-        expect(roots[0].$innerNodes.map((node: any) => node.$tag)).toEqual(['a', 'b']);
+        expect(roots[0].children.map((node: any) => node.tagName)).toEqual(['a', 'b']);
     });
 
     it('sets innerText only when the element has no child elements', () => {
-        expect(parse('<a>hello</a>')[0].$innerText).toBe('hello');
-        expect(parse('<a></a>')[0].$innerText).toBeUndefined();
-        expect(parse('<a>hello<b/></a>')[0].$innerText).toBeUndefined();
-        expect(parse('<a><b>text</b></a>')[0].$innerNodes[0].$innerText).toBe('text');
+        expect(parse('<a>hello</a>')[0].text).toBe('hello');
+        expect(parse('<a></a>')[0].text).toBeUndefined();
+        expect(parse('<a>hello<b/></a>')[0].text).toBeUndefined();
+        expect(parse('<a><b>text</b></a>')[0].children[0].text).toBe('text');
     });
 
     it('decodes entities in attributes and text', () => {
         const [node] = parse('<a x="&amp;&#65;&#x42;&#X43;">&lt;&gt;</a>');
         expect(node.x).toBe('&ABC');
-        expect(node.$innerText).toBe('<>');
+        expect(node.text).toBe('<>');
     });
 
     it('skips comments, processing instructions and doctypes', () => {
         const roots = parse('<?xml version="1.0"?><!-- a comment --><!DOCTYPE osm><a/>');
         expect(roots).toHaveLength(1);
-        expect(roots[0].$tag).toBe('a');
+        expect(roots[0].tagName).toBe('a');
     });
 
     it('supports quoted, boolean and oddly-spaced attributes', () => {
@@ -83,7 +83,7 @@ describe('XmlParser structural parsing', () => {
 
     it('supports namespaced/dashed tag names and literal whitespace', () => {
         const [node] = parse('<ns:a-b\nx="1"\ty="2"\r/>');
-        expect(node.$tag).toBe('ns:a-b');
+        expect(node.tagName).toBe('ns:a-b');
         expect(node.x).toBe('1');
         expect(node.y).toBe('2');
     });
@@ -102,12 +102,12 @@ describe('XmlParser structural parsing', () => {
         expect(parse('<a><b>')).toEqual([]);
     });
 
-    it('appends to an existing parent $innerNodes across parses', () => {
+    it('appends to an existing parent children across parses', () => {
         const parent: any = {};
         const parser = new XmlParser({});
         parser.parse('<a/>', parent);
         parser.parse('<b/>', parent);
-        expect(parent.$innerNodes.map((node: any) => node.$tag)).toEqual(['a', 'b']);
+        expect(parent.children.map((node: any) => node.tagName)).toEqual(['a', 'b']);
     });
 });
 
@@ -115,10 +115,10 @@ describe('XmlParser progressive events', () => {
     it('emits open and close events with parent nodes', () => {
         const parser = new XmlParser({ progressive: true });
         const events: string[] = [];
-        parser.on('<root>', (node, parent) => events.push(`open:${node.$tag}:${parent ? parent.$tag : '-'}`));
-        parser.on('</root>', (node, parent) => events.push(`close:${node.$tag}:${parent ? parent.$tag : '-'}`));
-        parser.on('<root.a>', (node, parent) => events.push(`open-a:${node.$tag}:${parent ? parent.$tag : '-'}`));
-        parser.on('</root.a>', (node, parent) => events.push(`close-a:${node.$tag}:${parent ? parent.$tag : '-'}`));
+        parser.on('<root>', (node, parent) => events.push(`open:${node.tagName}:${parent ? parent.tagName : '-'}`));
+        parser.on('</root>', (node, parent) => events.push(`close:${node.tagName}:${parent ? parent.tagName : '-'}`));
+        parser.on('<root.a>', (node, parent) => events.push(`open-a:${node.tagName}:${parent ? parent.tagName : '-'}`));
+        parser.on('</root.a>', (node, parent) => events.push(`close-a:${node.tagName}:${parent ? parent.tagName : '-'}`));
         parser.parse('<root><a/></root>');
         expect(events).toEqual([
             'open:root:-',
@@ -172,23 +172,6 @@ describe('XmlParser progressive events', () => {
         expect(b).toHaveBeenCalledTimes(1);
     });
 
-    it('honours conditioned listeners on open and close events', () => {
-        const parser = new XmlParser({ progressive: true });
-        const open = vi.fn();
-        const yes = vi.fn();
-        const no = vi.fn();
-        const plain = vi.fn();
-        parser.on("<root.a[$tag==='a']>", open);
-        parser.on("</root.a[$tag==='a']>", yes);
-        parser.on("</root.a[$tag==='b']>", no);
-        parser.on('</root.a>', plain);
-        parser.parse('<root><a/></root>');
-        expect(open).toHaveBeenCalledTimes(1);
-        expect(yes).toHaveBeenCalledTimes(1);
-        expect(no).not.toHaveBeenCalled();
-        expect(plain).toHaveBeenCalledTimes(1);
-    });
-
     it('removes listeners with on/off and removeListener', () => {
         const parser = new XmlParser({ progressive: true });
         const closed = vi.fn();
@@ -202,15 +185,6 @@ describe('XmlParser progressive events', () => {
         expect(opened).not.toHaveBeenCalled();
     });
 
-    it('removes conditioned listeners', () => {
-        const parser = new XmlParser({ progressive: true });
-        const fn = vi.fn();
-        parser.on("</root.a[$tag==='a']>", fn);
-        parser.off("</root.a[$tag==='a']>", fn);
-        parser.parse('<root><a/></root>');
-        expect(fn).not.toHaveBeenCalled();
-    });
-
     it('ignores removals for unknown events or different functions', () => {
         const parser = new XmlParser({ progressive: true });
         const added = vi.fn();
@@ -221,15 +195,6 @@ describe('XmlParser progressive events', () => {
         parser.parse('<root><a/></root>');
         expect(added).toHaveBeenCalledTimes(1);
         expect(other).not.toHaveBeenCalled();
-    });
-
-    it('treats events that merely contain "[" as unconditioned', () => {
-        const parser = new XmlParser({ progressive: true });
-        const fn = vi.fn();
-        parser.addListener('</root.a[foo>', fn);
-        parser.removeListener('</root.a[foo>', fn);
-        parser.parse('<root><a/></root>');
-        expect(fn).not.toHaveBeenCalled();
     });
 
     it('accepts and removes non-tag event names', () => {
@@ -255,8 +220,8 @@ describe('XmlParser parent tracking and dir prefixes', () => {
         const parser = new XmlParser({ queryParent: true });
         const roots = parser.parse('<root><a><b/></a></root>');
         const root = roots[0];
-        const a = root.$innerNodes[0];
-        const b = a.$innerNodes[0];
+        const a = root.children[0];
+        const b = a.children[0];
         expect(parser.getParent(a)).toBe(root);
         expect(parser.getParent(b)).toBe(a);
         expect(parser.getParent(root)).toBeUndefined();
@@ -270,14 +235,14 @@ describe('XmlParser parent tracking and dir prefixes', () => {
     });
 
     it('attaches parsed nodes to a supplied parent', () => {
-        const parent: any = { $tag: 'container' };
+        const parent: any = { tagName: 'container' };
         const parser = new XmlParser({ queryParent: true });
         const roots = parser.parse('<child x="1">text</child>', parent);
         expect(roots).toEqual([]);
-        expect(parent.$innerNodes).toHaveLength(1);
-        expect(parent.$innerNodes[0].x).toBe('1');
-        expect(parent.$innerNodes[0].$innerText).toBe('text');
-        expect(parser.getParent(parent.$innerNodes[0])).toBe(parent);
+        expect(parent.children).toHaveLength(1);
+        expect(parent.children[0].x).toBe('1');
+        expect(parent.children[0].text).toBe('text');
+        expect(parser.getParent(parent.children[0])).toBe(parent);
     });
 
     it('applies a dir prefix to events', () => {
@@ -299,18 +264,18 @@ describe('XmlParser parent tracking and dir prefixes', () => {
     });
 
     it('combines parent and dir prefixes', () => {
-        const parent: any = { $tag: 'container' };
+        const parent: any = { tagName: 'container' };
         const parser = new XmlParser({ progressive: true });
         const events: string[] = [];
         parser.on('<osm.child>', () => events.push('open'));
         parser.on('</osm.child>', () => events.push('close'));
         parser.parse('<child/>', parent, 'osm');
         expect(events).toEqual(['open', 'close']);
-        expect(parent.$innerNodes).toHaveLength(1);
+        expect(parent.children).toHaveLength(1);
     });
 
     it('uses the top-level path when a parent has no dir', () => {
-        const parent: any = { $tag: 'container' };
+        const parent: any = { tagName: 'container' };
         const parser = new XmlParser({ progressive: true });
         const events: string[] = [];
         parser.on('<child>', () => events.push('open'));

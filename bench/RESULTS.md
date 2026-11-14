@@ -42,82 +42,82 @@ Generated deterministically (`bench/generate.mjs`, fixed seed), ~27 MiB total:
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 14.9 | 252 | 16.4 MiB | 100,403 |
-| txml | 32.0 | 118 | 26.3 MiB | 100,403 |
-| fast-xml-parser | 101.3 | 37 | 20.9 MiB | 200,806 |
+| xmlparser | 14.5 | 260 | 16.4 MiB | 100,403 |
+| txml | 31.2 | 121 | 26.3 MiB | 100,403 |
+| fast-xml-parser | 101.6 | 37 | 20.9 MiB | 200,806 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 14.9 | 252 | 1 |
-| sax | 62.7 | 60 | 1 |
-| htmlparser2 | 28.0 | 135 | 1 |
+| xmlparser events | 14.8 | 254 | 1 |
+| sax | 62.1 | 61 | 1 |
+| htmlparser2 | 27.4 | 137 | 1 |
 
 ### deep — 2.3 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 13.3 | 173 | 11.3 MiB | 63,001 |
-| txml | 18.1 | 128 | 21.0 MiB | 63,001 |
-| fast-xml-parser | 82.1 | 28 | 19.9 MiB | 124,502 |
+| xmlparser | 12.9 | 179 | 11.3 MiB | 63,001 |
+| txml | 17.7 | 131 | 21.0 MiB | 63,001 |
+| fast-xml-parser | 82.3 | 28 | 19.9 MiB | 124,502 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 17.5 | 132 | 0 |
-| sax | 41.5 | 56 | 0 |
-| htmlparser2 | 18.9 | 122 | 0 |
+| xmlparser events | 17.1 | 135 | 0 |
+| sax | 40.9 | 56 | 0 |
+| htmlparser2 | 18.5 | 125 | 0 |
 
 ### leaf-storm — 6.2 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 25.0 | 248 | 22.1 MiB | 120,001 |
-| txml | 50.4 | 123 | 34.2 MiB | 120,001 |
-| fast-xml-parser | 147.7 | 42 | 27.7 MiB | 240,002 |
+| xmlparser | 24.5 | 253 | 22.1 MiB | 120,001 |
+| txml | 50.3 | 123 | 34.2 MiB | 120,001 |
+| fast-xml-parser | 148.3 | 42 | 27.7 MiB | 240,002 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 32.9 | 188 | 120,000 |
-| sax | 105.9 | 59 | 120,000 |
-| htmlparser2 | 44.1 | 141 | 120,000 |
+| xmlparser events | 33.1 | 188 | 120,000 |
+| sax | 101.4 | 61 | 120,000 |
+| htmlparser2 | 43.9 | 141 | 120,000 |
 
 ### osm-dense — 6.0 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 26.8 | 223 | 30.0 MiB | 158,901 |
-| txml | 50.9 | 117 | 42.5 MiB | 158,901 |
-| fast-xml-parser | 168.3 | 36 | 35.2 MiB | 317,802 |
+| xmlparser | 27.5 | 218 | 30.0 MiB | 158,901 |
+| txml | 49.9 | 120 | 42.5 MiB | 158,901 |
+| fast-xml-parser | 166.2 | 36 | 35.2 MiB | 317,802 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 27.7 | 216 | 32,700 |
-| sax | 103.0 | 58 | 32,700 |
-| htmlparser2 | 47.0 | 127 | 32,700 |
+| xmlparser events | 26.9 | 222 | 32,700 |
+| sax | 99.4 | 60 | 32,700 |
+| htmlparser2 | 45.3 | 132 | 32,700 |
 
 ### tag-storm — 6.7 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 25.5 | 263 | 31.9 MiB | 195,001 |
-| txml | 53.9 | 125 | 49.8 MiB | 195,001 |
-| fast-xml-parser | 187.9 | 36 | 39.9 MiB | 390,002 |
+| xmlparser | 25.5 | 264 | 31.9 MiB | 195,001 |
+| txml | 54.4 | 123 | 49.8 MiB | 195,001 |
+| fast-xml-parser | 183.5 | 37 | 39.9 MiB | 390,002 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 25.5 | 263 | 15,000 |
-| sax | 108.7 | 62 | 15,000 |
-| htmlparser2 | 50.2 | 134 | 15,000 |
+| xmlparser events | 25.7 | 262 | 15,000 |
+| sax | 108.3 | 62 | 15,000 |
+| htmlparser2 | 50.5 | 133 | 15,000 |
 
 ### text — 1.9 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 6.0 | 308 | 5.7 MiB | 18,001 |
-| txml | 4.9 | 382 | 5.9 MiB | 18,001 |
-| fast-xml-parser | 26.5 | 70 | 7.5 MiB | 42,002 |
+| xmlparser | 6.1 | 303 | 5.7 MiB | 18,001 |
+| txml | 4.9 | 381 | 5.9 MiB | 18,001 |
+| fast-xml-parser | 26.1 | 71 | 7.5 MiB | 42,002 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 6.2 | 300 | 6,000 |
+| xmlparser events | 6.2 | 301 | 6,000 |
 | sax | 22.9 | 81 | 6,000 |
-| htmlparser2 | 10.4 | 179 | 6,000 |
+| htmlparser2 | 10.4 | 178 | 6,000 |
