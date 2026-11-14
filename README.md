@@ -9,8 +9,8 @@ single pass.
   `open`/`close` event keyed by its dotted path, so a consumer can convert while
   parsing without a second traversal.
 - **Small**: 3.6 KiB minified, 1.4 KiB gzipped (ESM).
-- **Fast on document-shaped data**: ~1.8x `txml`'s throughput on OSM-style
-  documents at ~30% less retained heap; ~2.2x `htmlparser2`'s on element
+- **Fast on document-shaped data**: ~1.9x `txml`'s throughput on OSM-style
+  documents at ~30% less retained heap; ~1.6x `htmlparser2`'s on element
   callbacks. See [Benchmarks](#benchmarks).
 
 ```js
@@ -74,10 +74,14 @@ parser.on('</osm.way>', (way) => {
 roots to, and a dotted path prefix used when building event names.
 
 The parser is non-validating and never throws on malformed input: unterminated
-tags, comments, processing instructions, doctypes and unbalanced closers are
-skipped, so a truncated download still yields the elements it did contain.
-CDATA, the five predefined entities and numeric character references are
-decoded.
+tags, comments, processing instructions and doctypes are skipped, and elements
+still open at end of input are closed so a truncated download yields the
+document parsed so far (`'<r><a>text'` returns `r` with an `a` child whose
+`text` is `'text'`).
+
+CDATA sections are content, not markup: their text is kept verbatim and is not
+entity-decoded, while text outside them is decoded (the five predefined
+entities and numeric character references).
 
 ## Benchmarks
 
@@ -89,17 +93,17 @@ Realistic Overpass-style document, 6.0 MiB, Apple M4 Pro / Node 26:
 
 | workload | xml-event-parser | txml | fast-xml-parser | sax | htmlparser2 |
 | --- | --- | --- | --- | --- | --- |
-| tree (parse + walk) | **27.5 ms, 218 MB/s** | 49.9 ms, 120 MB/s | 166.2 ms, 36 MB/s | — | — |
+| tree (parse + walk) | **26.1 ms, 229 MB/s** | 50.6 ms, 118 MB/s | 167.4 ms, 36 MB/s | — | — |
 | tree, retained heap | **30.0 MiB** | 42.5 MiB | 35.2 MiB | — | — |
-| element callbacks | **26.9 ms, 222 MB/s** | — | — | 99.4 ms, 60 MB/s | 45.3 ms, 132 MB/s |
+| element callbacks | **27.5 ms, 218 MB/s** | — | — | 99.1 ms, 60 MB/s | 45.1 ms, 133 MB/s |
 
 Two honest caveats:
 
 - `progressive` still builds the document, so the callback row does strictly more
   work than `sax` or `htmlparser2` (it holds 30 MiB for a 6 MiB input) and is
   still faster.
-- On text-heavy documents with many entities and CDATA, `txml` is ~20% faster
-  (382 MB/s against 303 MB/s). Fixing that path is the next performance task.
+- On text-heavy documents with many entities and CDATA, `txml` is ~23% faster
+  (382 MB/s against 310 MB/s). Fixing that path is the next performance task.
 
 ## Status
 

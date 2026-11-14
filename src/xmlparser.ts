@@ -44,6 +44,38 @@ export function decodeEntities(value: string): string {
     });
 }
 
+/**
+ * Decode element content: CDATA sections contribute their text verbatim (per
+ * XML, entities inside CDATA are not references), everything else is
+ * entity-decoded. The common case - no CDATA - is one `indexOf` and the
+ * existing fast path.
+ */
+function decodeContent(raw: string): string {
+    if (raw.indexOf('<![CDATA[') < 0) {
+        return raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
+    }
+    let out = '';
+    let at = 0;
+    while (at < raw.length) {
+        const start = raw.indexOf('<![CDATA[', at);
+        if (start < 0) {
+            out += decodeEntities(raw.slice(at));
+            break;
+        }
+        if (start > at) {
+            out += decodeEntities(raw.slice(at, start));
+        }
+        const end = raw.indexOf(']]>', start + 9);
+        if (end < 0) {
+            out += raw.slice(start + 9);
+            break;
+        }
+        out += raw.slice(start + 9, end);
+        at = end + 3;
+    }
+    return out;
+}
+
 // character codes used by the scanner
 const LT = 60;        // <
 const GT = 62;        // >
@@ -151,8 +183,7 @@ export class XmlParser {
                 const parentNode = parentFrame ? parentFrame.node : undefined;
 
                 if (!node.children && lt > frame.textStart) {
-                    const raw = xml.slice(frame.textStart, lt);
-                    node.text = raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
+                    node.text = decodeContent(xml.slice(frame.textStart, lt));
                 }
 
                 if (progressive && this.watchedPaths.has(frame.fullTag)) {
@@ -184,6 +215,13 @@ export class XmlParser {
                 // comment, CDATA or doctype
                 if (xml.charCodeAt(i + 1) === 45 && xml.charCodeAt(i + 2) === 45) {
                     const end = xml.indexOf('-->', i + 3);
+                    i = end < 0 ? len : end + 3;
+                } else if (xml.startsWith('![CDATA[', i)) {
+                    // CDATA is content, not markup: skip to its terminator so
+                    // '<' and '>' inside it are not read as elements. The
+                    // closing-tag branch turns the slice into text, and
+                    // decodeContent() keeps it verbatim.
+                    const end = xml.indexOf(']]>', i + 9);
                     i = end < 0 ? len : end + 3;
                 } else {
                     const gt = xml.indexOf('>', i);
@@ -300,6 +338,31 @@ export class XmlParser {
             const frame: Frame = { node, fullTag, textStart: i };
             stack.push(frame);
             top = frame;
+        }
+
+        // Truncated input (a download cut mid-document, an unterminated CDATA
+        // section, a missing close tag): close the open elements instead of
+        // dropping everything parsed so far. Any trailing text belongs to the
+        // innermost element that is being closed here.
+        let trailing = xml.length;
+        while (stack.length > 0) {
+            const frame = stack.pop()!;
+            const node = frame.node;
+            if (!node.children && trailing > frame.textStart) {
+                node.text = decodeContent(xml.slice(frame.textStart, trailing));
+                trailing = frame.textStart;
+            }
+            const parentFrame = stack.length ? stack[stack.length - 1] : rootOwner;
+            const parentNode = parentFrame ? parentFrame.node : undefined;
+            if (parentNode) {
+                if (parentNode.children) {
+                    parentNode.children.push(node);
+                } else {
+                    parentNode.children = [node];
+                }
+            } else {
+                roots.push(node);
+            }
         }
 
         return roots;

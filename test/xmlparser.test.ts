@@ -99,7 +99,13 @@ describe('XmlParser structural parsing', () => {
         }
         expect(parse('')).toEqual([]);
         expect(parse('</a>')).toEqual([]);
-        expect(parse('<a><b>')).toEqual([]);
+    });
+
+    it('closes open elements at end of input instead of dropping them', () => {
+        expect(parse('<a><b>')).toEqual([{ tagName: 'a', children: [{ tagName: 'b' }] }]);
+        expect(parse('<r><a>text')).toEqual([{ tagName: 'r', children: [{ tagName: 'a', text: 'text' }] }]);
+        expect(parse('<r><a>ok</a><b>trunc'))
+            .toEqual([{ tagName: 'r', children: [{ tagName: 'a', text: 'ok' }, { tagName: 'b', text: 'trunc' }] }]);
     });
 
     it('appends to an existing parent children across parses', () => {
@@ -108,6 +114,27 @@ describe('XmlParser structural parsing', () => {
         parser.parse('<a/>', parent);
         parser.parse('<b/>', parent);
         expect(parent.children.map((node: any) => node.tagName)).toEqual(['a', 'b']);
+    });
+});
+
+describe('CDATA', () => {
+    it('returns the content without the wrapper', () => {
+        expect(parse('<r><a><![CDATA[keep <this> & that]]></a></r>')[0].children![0].text)
+            .toBe('keep <this> & that');
+    });
+
+    it('does not decode entities inside CDATA', () => {
+        expect(parse('<r><a><![CDATA[a &amp; b]]></a></r>')[0].children![0].text).toBe('a &amp; b');
+    });
+
+    it('decodes entities outside CDATA and keeps CDATA verbatim', () => {
+        expect(parse('<r><a>x &amp; y<![CDATA[ &amp; z]]></a></r>')[0].children![0].text)
+            .toBe('x & y &amp; z');
+    });
+
+    it('handles an unterminated CDATA section without throwing', () => {
+        expect(parse('<r><a><![CDATA[unterminated</a></r>')[0].children![0].text)
+            .toBe('unterminated</a></r>');
     });
 });
 
