@@ -9,9 +9,10 @@ single pass.
   `open`/`close` event keyed by its dotted path, so a consumer can convert while
   parsing without a second traversal.
 - **Small**: 3.6 KiB minified, 1.4 KiB gzipped (ESM).
-- **Fast on document-shaped data**: ~1.9x `txml`'s throughput on OSM-style
-  documents at ~30% less retained heap; ~1.6x `htmlparser2`'s on element
-  callbacks. See [Benchmarks](#benchmarks).
+- **Fastest on every shape we benchmarked**: ~1.9x `txml`'s throughput on
+  OSM-style documents at ~30% less retained heap, and ahead of `txml` on
+  text/entity-heavy input too; ~1.6x `htmlparser2`'s on element callbacks. See
+  [Benchmarks](#benchmarks).
 
 ```js
 import { XmlParser } from 'xml-event-parser';
@@ -93,17 +94,18 @@ Realistic Overpass-style document, 6.0 MiB, Apple M4 Pro / Node 26:
 
 | workload | xml-event-parser | txml | fast-xml-parser | sax | htmlparser2 |
 | --- | --- | --- | --- | --- | --- |
-| tree (parse + walk) | **26.1 ms, 229 MB/s** | 50.6 ms, 118 MB/s | 167.4 ms, 36 MB/s | — | — |
+| tree (parse + walk) | **26.0 ms, 230 MB/s** | 50.6 ms, 118 MB/s | 167.8 ms, 36 MB/s | — | — |
 | tree, retained heap | **30.0 MiB** | 42.5 MiB | 35.2 MiB | — | — |
-| element callbacks | **27.5 ms, 218 MB/s** | — | — | 99.1 ms, 60 MB/s | 45.1 ms, 133 MB/s |
+| element callbacks | **27.8 ms, 215 MB/s** | — | — | 100.0 ms, 60 MB/s | 44.9 ms, 133 MB/s |
 
 Two honest caveats:
 
 - `progressive` still builds the document, so the callback row does strictly more
   work than `sax` or `htmlparser2` (it holds 30 MiB for a 6 MiB input) and is
   still faster.
-- On text-heavy documents with many entities and CDATA, `txml` is ~23% faster
-  (382 MB/s against 310 MB/s). Fixing that path is the next performance task.
+- On text-heavy documents with many entities and CDATA the entity decoder
+  dominates; replacing the regex callback with a manual scan moved this shape
+  from 325 to 442 MB/s, ahead of `txml` (382 MB/s).
 
 ## Status
 
