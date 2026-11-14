@@ -116,7 +116,10 @@ public naming (`children`/`tagName`/`text` instead of `$innerNodes`/`$tag`/
 `$innerText`) and the removal of the `new Function`-based conditioned-path
 events.
 
-Not published yet.
+Not published yet. The release workflow publishes only when the repository
+variable `NPM_TRUSTED_PUBLISHER` is `true`; before that, a release is published
+locally because npm cannot configure a trusted publisher for a package that does
+not exist yet.
 
 ## Development
 

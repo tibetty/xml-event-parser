@@ -40,7 +40,10 @@ jobs:
   release:
     name: Release
     needs: release-check
-    if: needs.release-check.outputs.publish == 'true'
+    # npm cannot attach a trusted publisher to a package that does not exist yet,
+    # so the first release is published locally. Set the repository variable
+    # NPM_TRUSTED_PUBLISHER=true once the publisher is configured on npmjs.com.
+    if: needs.release-check.outputs.publish == 'true' && vars.NPM_TRUSTED_PUBLISHER == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
