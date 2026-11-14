@@ -1,7 +1,7 @@
 {
   "name": "xml-event-parser",
   "version": "0.2.2",
-  "description": "Tiny dependency-free XML parser with a tree and path-based events in one pass",
+  "description": "Streaming XML parser with path-based events: constant memory, zero dependencies, 2.2 KiB",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tibetty/xml-event-parser.git"
