@@ -1,0 +1,28 @@
+{
+  "name": "xml-event-tree",
+  "version": "0.0.0",
+  "description": "Tiny zero-dependency XML parser: builds a tree and emits path-based events in one pass",
+  "main": "src/xmlparser.ts",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "bench:data": "node bench/generate.mjs",
+    "bench": "node --expose-gc bench/run.mjs"
+  },
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "devDependencies": {
+    "fast-xml-parser": "^5.12.1",
+    "htmlparser2": "^12.0.0",
+    "sax": "^1.6.1",
+    "txml": "^6.0.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
