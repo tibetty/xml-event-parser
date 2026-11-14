@@ -42,82 +42,125 @@ Generated deterministically (`bench/generate.mjs`, fixed seed), ~27 MiB total:
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 14.3 | 263 | 16.4 MiB | 100,403 |
-| txml | 33.6 | 112 | 26.3 MiB | 100,403 |
-| fast-xml-parser | 102.7 | 37 | 20.9 MiB | 200,806 |
+| xmlparser | 16.5 | 228 | 16.4 MiB | 100,403 |
+| txml | 31.7 | 119 | 26.3 MiB | 100,403 |
+| fast-xml-parser | 102.4 | 37 | 20.9 MiB | 200,806 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 14.8 | 255 | 1 |
-| sax | 61.9 | 61 | 1 |
+| xmlparser events | 17.8 | 211 | 1 |
+| sax | 62.1 | 61 | 1 |
 | htmlparser2 | 27.3 | 138 | 1 |
+
+| parser (64 KiB chunks) | streamed: fastest ms | MB/s | elements seen |
+| --- | --- | --- | --- |
+| xmlparser (retain none) | 21.4 | 176 | 1 |
+| sax | 63.9 | 59 | 1 |
+| htmlparser2 | 29.6 | 127 | 1 |
 
 ### deep — 2.3 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 11.1 | 208 | 11.3 MiB | 63,001 |
-| txml | 17.8 | 130 | 21.0 MiB | 63,001 |
-| fast-xml-parser | 82.6 | 28 | 19.9 MiB | 124,502 |
+| xmlparser | 12.8 | 181 | 11.3 MiB | 63,001 |
+| txml | 18.0 | 128 | 21.0 MiB | 63,001 |
+| fast-xml-parser | 84.2 | 27 | 19.9 MiB | 124,502 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 17.6 | 131 | 0 |
-| sax | 40.7 | 57 | 0 |
-| htmlparser2 | 18.7 | 123 | 0 |
+| xmlparser events | 20.0 | 115 | 0 |
+| sax | 41.2 | 56 | 0 |
+| htmlparser2 | 18.9 | 122 | 0 |
+
+| parser (64 KiB chunks) | streamed: fastest ms | MB/s | elements seen |
+| --- | --- | --- | --- |
+| xmlparser (retain none) | 18.4 | 125 | 0 |
+| sax | 42.9 | 54 | 0 |
+| htmlparser2 | 21.0 | 110 | 0 |
 
 ### leaf-storm — 6.2 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 24.3 | 255 | 22.1 MiB | 120,001 |
-| txml | 51.4 | 121 | 34.2 MiB | 120,001 |
-| fast-xml-parser | 144.5 | 43 | 27.7 MiB | 240,002 |
+| xmlparser | 30.1 | 206 | 22.2 MiB | 120,001 |
+| txml | 51.3 | 121 | 34.2 MiB | 120,001 |
+| fast-xml-parser | 152.4 | 41 | 27.7 MiB | 240,002 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 33.1 | 187 | 120,000 |
-| sax | 100.3 | 62 | 120,000 |
-| htmlparser2 | 43.7 | 142 | 120,000 |
+| xmlparser events | 41.7 | 149 | 120,000 |
+| sax | 100.0 | 62 | 120,000 |
+| htmlparser2 | 43.9 | 141 | 120,000 |
+
+| parser (64 KiB chunks) | streamed: fastest ms | MB/s | elements seen |
+| --- | --- | --- | --- |
+| xmlparser (retain none) | 37.4 | 166 | 120,000 |
+| sax | 102.8 | 60 | 120,000 |
+| htmlparser2 | 49.7 | 125 | 120,000 |
 
 ### osm-dense — 6.0 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 26.0 | 230 | 30.0 MiB | 158,901 |
-| txml | 50.6 | 118 | 42.5 MiB | 158,901 |
-| fast-xml-parser | 167.8 | 36 | 35.2 MiB | 317,802 |
+| xmlparser | 30.1 | 199 | 30.0 MiB | 158,901 |
+| txml | 49.5 | 121 | 42.5 MiB | 158,901 |
+| fast-xml-parser | 169.0 | 35 | 35.2 MiB | 317,802 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 27.8 | 215 | 32,700 |
-| sax | 100.0 | 60 | 32,700 |
-| htmlparser2 | 44.9 | 133 | 32,700 |
+| xmlparser events | 31.6 | 189 | 32,700 |
+| sax | 98.7 | 61 | 32,700 |
+| htmlparser2 | 45.2 | 132 | 32,700 |
+
+| parser (64 KiB chunks) | streamed: fastest ms | MB/s | elements seen |
+| --- | --- | --- | --- |
+| xmlparser (retain none) | 27.3 | 219 | 32,700 |
+| sax | 103.3 | 58 | 32,700 |
+| htmlparser2 | 50.8 | 118 | 32,700 |
 
 ### tag-storm — 6.7 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 25.3 | 265 | 31.9 MiB | 195,001 |
-| txml | 53.9 | 125 | 49.8 MiB | 195,001 |
-| fast-xml-parser | 193.6 | 35 | 39.9 MiB | 390,002 |
+| xmlparser | 29.6 | 227 | 31.9 MiB | 195,001 |
+| txml | 55.4 | 121 | 49.8 MiB | 195,001 |
+| fast-xml-parser | 192.9 | 35 | 39.9 MiB | 390,002 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 25.9 | 259 | 15,000 |
-| sax | 106.8 | 63 | 15,000 |
-| htmlparser2 | 50.1 | 134 | 15,000 |
+| xmlparser events | 28.9 | 233 | 15,000 |
+| sax | 108.0 | 62 | 15,000 |
+| htmlparser2 | 49.6 | 136 | 15,000 |
+
+| parser (64 KiB chunks) | streamed: fastest ms | MB/s | elements seen |
+| --- | --- | --- | --- |
+| xmlparser (retain none) | 25.6 | 263 | 15,000 |
+| sax | 110.9 | 61 | 15,000 |
+| htmlparser2 | 57.1 | 118 | 15,000 |
 
 ### text — 1.9 MiB
 
 | parser | tree: fastest ms | MB/s | retained | elements |
 | --- | --- | --- | --- | --- |
-| xmlparser | 4.3 | 429 | 6.2 MiB | 18,001 |
-| txml | 4.9 | 378 | 5.9 MiB | 18,001 |
-| fast-xml-parser | 26.8 | 69 | 7.5 MiB | 42,002 |
+| xmlparser | 4.9 | 381 | 6.2 MiB | 18,001 |
+| txml | 4.8 | 385 | 6.0 MiB | 18,001 |
+| fast-xml-parser | 26.2 | 71 | 7.5 MiB | 42,002 |
 
 | parser | stream: fastest ms | MB/s | elements seen |
 | --- | --- | --- | --- |
-| xmlparser events | 4.7 | 397 | 6,000 |
-| sax | 22.9 | 81 | 6,000 |
-| htmlparser2 | 10.4 | 178 | 6,000 |
+| xmlparser events | 5.4 | 342 | 6,000 |
+| sax | 22.7 | 82 | 6,000 |
+| htmlparser2 | 10.5 | 176 | 6,000 |
+
+| parser (64 KiB chunks) | streamed: fastest ms | MB/s | elements seen |
+| --- | --- | --- | --- |
+| xmlparser (retain none) | 5.7 | 325 | 6,000 |
+| sax | 23.6 | 79 | 6,000 |
+| htmlparser2 | 11.7 | 158 | 6,000 |
+
+### txml `transformStream` (async, 64 KiB chunks, top-level nodes)
+
+| dataset | ms | MB/s | nodes yielded |
+| --- | --- | --- | --- |
+| osm-dense | 77.4 | 77 | 32700 |
+| tag-storm | 68.0 | 99 | 15000 |

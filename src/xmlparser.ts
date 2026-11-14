@@ -120,13 +120,48 @@ interface Frame {
     node: XmlNode;
     fullTag: string;
     textStart: number;
+    /**
+     * Whether a child element was parsed inside this one. Text is only kept for
+     * elements without children, and the flag is what lets the scanner drop
+     * consumed input: a frame with children never needs its text start again.
+     * (`node.children` cannot answer this under `retain: 'none'`, where
+     * children are deliberately not attached.)
+     */
+    hasChild?: boolean;
+}
+
+export type Retain = 'all' | 'root' | 'none';
+
+export interface XmlParserOptions {
+    /** Emit `<path>` / `</path>` events as elements open and close. Default `false`. */
+    progressive?: boolean;
+    /** Track parents so `getParent(node)` works. Default `false`. */
+    queryParent?: boolean;
+    /**
+     * What the parser keeps after an element closes:
+     * - `'all'` (default) the whole document tree, returned by `end()`
+     * - `'root'` the root being built; a finished top-level element is emitted
+     *   and dropped, so memory is bounded by the largest root
+     * - `'none'` nothing; every element is emitted and dropped, so memory is
+     *   bounded by the nesting depth. Combine with listeners: an element
+     *   nobody listens for is parsed and discarded.
+     */
+    retain?: Retain;
+}
+
+interface OpenTag {
+    node: XmlNode;
+    tag: string;
+    selfClose: boolean;
+    end: number;
 }
 
 export class XmlParser {
     private queryParent: boolean = false;
     private progressive: boolean = false;
-    private parentMap: WeakMap<any, any> = new WeakMap();
-    private evtListeners: { [k: string]: any };
+    private retain: Retain = 'all';
+    private parentMap: WeakMap<XmlNode, XmlNode> = new WeakMap();
+    private evtListeners: { [k: string]: XmlListener[] } = {};
     /**
      * Number of registered open-tag (`<path>`) listeners; lets the scanner skip
      * building open-event strings for the overwhelmingly common leaf elements.
@@ -142,21 +177,70 @@ export class XmlParser {
     private watchedChildren: Map<string, Set<string>> = new Map();
     private watchedTopLevel: Set<string> = new Set();
 
-    constructor(opts: any) {
+    /** Input not consumed yet: pending text plus any construct split by a chunk. */
+    private buffer: string = '';
+    /** Next position to scan in `buffer`. */
+    private cursor: number = 0;
+    private stack: Frame[] = [];
+    private roots: XmlNode[] = [];
+    private top: Frame | undefined;
+    private rootOwner: Frame | undefined;
+    private basePath: string = '';
+    private active: boolean = false;
+
+    constructor(opts?: XmlParserOptions) {
         if (opts) {
-            this.queryParent = opts.queryParent ? true : false;
-            this.progressive = opts.progressive;
-            if (this.queryParent) {
-                this.parentMap = new WeakMap();
+            this.queryParent = opts.queryParent === true;
+            this.progressive = opts.progressive === true;
+            if (opts.retain) {
+                this.retain = opts.retain;
             }
         }
-        this.evtListeners = {};
     }
 
     /**
-     * Scan an XML string in a single pass, maintaining a stack of open elements,
-     * building a `tagName`/attribute/`children` node tree and emitting
-     * progressive `<path>` / `</path>` events as elements open and close.
+     * Feed a chunk of XML.
+     *
+     * Chunks may split anywhere: inside a tag, an attribute value, a comment, a
+     * CDATA section or a text run. Anything incomplete is kept and resumed on
+     * the next `write()`; call `end()` when the input is exhausted.
+     */
+    public write(chunk: string): this {
+        if (!this.active) {
+            this.begin(undefined, undefined);
+        }
+        if (chunk.length === 0) {
+            return this;
+        }
+        if (this.buffer.length === 0) {
+            this.buffer = chunk;
+        } else {
+            this.buffer += chunk;
+        }
+        this.consume(false);
+        return this;
+    }
+
+    /**
+     * Finish the document: close elements still open at the end of input and
+     * return the top-level nodes (empty for `retain: 'root' | 'none'`).
+     */
+    public end(): XmlNode[] {
+        if (!this.active) {
+            return [];
+        }
+        this.consume(true);
+        this.finish();
+        const roots = this.roots;
+        this.reset();
+        return roots;
+    }
+
+    /**
+     * Parse a complete XML string in one pass.
+     *
+     * Equivalent to `write(xml).end()`, and the only entry point you need
+     * unless the document arrives in pieces.
      *
      * @param xml - the XML source to scan.
      * @param parent - optional pre-existing node that owns the parsed content;
@@ -165,46 +249,102 @@ export class XmlParser {
      * @param dir - optional dotted tag-path prefix applied to emitted event names.
      * @returns the top-level nodes (empty when a `parent` owns them).
      */
-    public parse(xml: string, parent?: any, dir?: string) {
+    public parse(xml: string, parent?: XmlNode, dir?: string): XmlNode[] {
+        this.begin(parent, dir);
+        this.write(xml);
+        return this.end();
+    }
+
+    private begin(parent: XmlNode | undefined, dir: string | undefined): void {
+        this.buffer = '';
+        this.cursor = 0;
+        this.stack = [];
+        this.roots = [];
+        this.basePath = dir ? dir : '';
+        this.top = parent ? { node: parent, fullTag: this.basePath, textStart: 0 } : undefined;
+        this.rootOwner = this.top;
+        this.parentMap = new WeakMap();
+        this.active = true;
+    }
+
+    private reset(): void {
+        this.buffer = '';
+        this.cursor = 0;
+        this.stack = [];
+        this.roots = [];
+        this.top = undefined;
+        this.rootOwner = undefined;
+        this.basePath = '';
+        this.active = false;
+    }
+
+    /**
+     * Store a closed element according to the retention mode.
+     *
+     * `parentNode === undefined` means the element is top-level (a root), which
+     * `retain: 'root'` drops after emitting it.
+     */
+    private attach(node: XmlNode, parentNode: XmlNode | undefined): void {
+        if (this.retain === 'none') {
+            return;
+        }
+        if (parentNode === undefined) {
+            if (this.retain === 'all') {
+                this.roots.push(node);
+            }
+            return;
+        }
+        const children = parentNode.children;
+        if (children) {
+            children.push(node);
+        } else {
+            parentNode.children = [node];
+        }
+    }
+
+    /** Scan everything in `buffer` that is complete, or all of it at `end()`. */
+    private consume(final: boolean): void {
+        const xml = this.buffer;
         const len = xml.length;
         const progressive = this.progressive;
-        const queryParent = this.queryParent;
-        const parentMap = this.parentMap;
-
-        const basePath = dir ? dir : '';
-        const roots: any[] = [];
-        const stack: Frame[] = [];
         const hasOpenListeners = progressive && this.openListenerCount > 0;
-        let top: Frame | undefined = parent
-            ? { node: parent, fullTag: basePath, textStart: 0 }
-            : undefined;
-        const rootOwner = top;
+        let i = this.cursor;
+        // Set when the buffer ends inside a construct we cannot finish yet.
+        let pending = -1;
 
-        let i = 0;
         while (i < len) {
             const lt = xml.indexOf('<', i);
             if (lt < 0) {
                 break;
             }
+            pending = lt;
             i = lt + 1;
+            if (i >= len) {
+                break;
+            }
             const c = xml.charCodeAt(i);
 
             if (c === SLASH) {
                 // closing tag: </tag>
                 const gt = xml.indexOf('>', i);
                 if (gt < 0) {
+                    if (!final) {
+                        break;
+                    }
+                    i = len;
                     break;
                 }
-                const frame = stack.pop();
+                const frame = this.stack.pop();
                 i = gt + 1;
+                pending = -1;
                 if (!frame) {
                     continue;
                 }
                 const node = frame.node;
-                const parentFrame = stack.length ? stack[stack.length - 1] : rootOwner;
+                const parentFrame = this.stack.length ? this.stack[this.stack.length - 1] : this.rootOwner;
                 const parentNode = parentFrame ? parentFrame.node : undefined;
 
-                if (!node.children && lt > frame.textStart) {
+                if (!frame.hasChild && lt > frame.textStart) {
                     node.text = decodeContent(xml.slice(frame.textStart, lt));
                 }
 
@@ -212,121 +352,77 @@ export class XmlParser {
                     this.emit('</' + frame.fullTag + '>', node, parentNode);
                 }
 
-                if (parentNode) {
-                    const inner = parentNode.children;
-                    if (inner) {
-                        inner.push(node);
-                    } else {
-                        parentNode.children = [node];
-                    }
-                } else {
-                    roots.push(node);
+                this.attach(node, parentNode);
+                if (parentFrame) {
+                    parentFrame.hasChild = true;
                 }
-                top = parentFrame;
+                this.top = parentFrame;
                 continue;
             }
 
             if (c === QUESTION) {
                 // processing instruction: <? ... ?>
                 const gt = xml.indexOf('>', i);
-                i = gt < 0 ? len : gt + 1;
+                if (gt < 0) {
+                    if (!final) {
+                        break;
+                    }
+                    i = len;
+                    break;
+                }
+                i = gt + 1;
+                pending = -1;
                 continue;
             }
 
             if (c === BANG) {
                 // comment, CDATA or doctype
+                let end: number;
                 if (xml.charCodeAt(i + 1) === 45 && xml.charCodeAt(i + 2) === 45) {
-                    const end = xml.indexOf('-->', i + 3);
-                    i = end < 0 ? len : end + 3;
+                    end = xml.indexOf('-->', i + 3);
+                    end = end < 0 ? -1 : end + 3;
                 } else if (xml.startsWith('![CDATA[', i)) {
                     // CDATA is content, not markup: skip to its terminator so
                     // '<' and '>' inside it are not read as elements. The
                     // closing-tag branch turns the slice into text, and
                     // decodeContent() keeps it verbatim.
-                    const end = xml.indexOf(']]>', i + 9);
-                    i = end < 0 ? len : end + 3;
+                    end = xml.indexOf(']]>', i + 9);
+                    end = end < 0 ? -1 : end + 3;
                 } else {
-                    const gt = xml.indexOf('>', i);
-                    i = gt < 0 ? len : gt + 1;
+                    end = xml.indexOf('>', i);
+                    end = end < 0 ? -1 : end + 1;
                 }
+                if (end < 0) {
+                    if (!final) {
+                        break;
+                    }
+                    i = len;
+                    break;
+                }
+                i = end;
+                pending = -1;
                 continue;
             }
 
-            // opening tag: read the tag name
-            let j = i;
-            while (j < len) {
-                const ch = xml.charCodeAt(j);
-                if (isSpace(ch) || ch === SLASH || ch === GT) {
-                    break;
-                }
-                j++;
+            const opened = this.parseOpenTag(xml, i, len, final);
+            if (opened === null) {
+                break;
             }
-            const tag = xml.slice(i, j);
-            const node: XmlNode = { tagName: tag };
+            i = opened.end;
+            pending = -1;
+            const node = opened.node;
+            const tag = opened.tag;
+            const parentNode = this.top ? this.top.node : undefined;
 
-            // parse attributes up to the closing '>' (quote-aware)
-            let selfClose = false;
-            while (j < len) {
-                let ch = xml.charCodeAt(j);
-                while (isSpace(ch)) {
-                    ch = xml.charCodeAt(++j);
-                }
-                if (ch === GT) {
-                    j++;
-                    break;
-                }
-                if (ch === SLASH) {
-                    selfClose = true;
-                    j++;
-                    continue;
-                }
-
-                const nameStart = j;
-                while (j < len) {
-                    ch = xml.charCodeAt(j);
-                    if (ch === EQUALS || isSpace(ch) || ch === GT || ch === SLASH) {
-                        break;
-                    }
-                    j++;
-                }
-                const attrName = xml.slice(nameStart, j);
-
-                while (isSpace(xml.charCodeAt(j))) {
-                    j++;
-                }
-                if (xml.charCodeAt(j) === EQUALS) {
-                    j++;
-                    while (isSpace(xml.charCodeAt(j))) {
-                        j++;
-                    }
-                    const q = xml.charCodeAt(j);
-                    if (q === DQUOTE || q === SQUOTE) {
-                        j++;
-                        let valEnd = xml.indexOf(q === DQUOTE ? '"' : "'", j);
-                        if (valEnd < 0) {
-                            valEnd = len;
-                        }
-                        const raw = xml.slice(j, valEnd);
-                        node[attrName] = raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
-                        j = valEnd + 1;
-                    }
-                } else if (attrName) {
-                    node[attrName] = '';
-                }
-            }
-            i = j;
-
-            const parentNode = top ? top.node : undefined;
-
-            if (queryParent && parentNode) {
-                parentMap.set(node, parentNode);
+            if (this.queryParent && parentNode) {
+                this.parentMap.set(node, parentNode);
             }
 
             // '?'/'!' prefixed tags were already routed above; treat trailing
             // '/' (and the implicitly self-closing prolog tags) as leaves.
-            if (selfClose) {
+            if (opened.selfClose) {
                 if (progressive) {
-                    const parentTag = top ? top.fullTag : basePath;
+                    const parentTag = this.top ? this.top.fullTag : this.basePath;
                     const watched = parentTag
                         ? this.watchedChildren.get(parentTag)
                         : this.watchedTopLevel;
@@ -338,58 +434,175 @@ export class XmlParser {
                         this.emit('</' + fullTag + '>', node, parentNode);
                     }
                 }
-                if (parentNode) {
-                    const inner = parentNode.children;
-                    if (inner) {
-                        inner.push(node);
-                    } else {
-                        parentNode.children = [node];
-                    }
-                } else {
-                    roots.push(node);
+                this.attach(node, parentNode);
+                if (this.top) {
+                    this.top.hasChild = true;
                 }
                 continue;
             }
 
-            const fullTag = top
-                ? (top.fullTag ? top.fullTag + '.' + tag : tag)
-                : (basePath ? basePath + '.' + tag : tag);
+            const fullTag = this.top
+                ? (this.top.fullTag ? this.top.fullTag + '.' + tag : tag)
+                : (this.basePath ? this.basePath + '.' + tag : tag);
             if (hasOpenListeners && this.watchedPaths.has(fullTag)) {
                 this.emit('<' + fullTag + '>', node, parentNode);
             }
             const frame: Frame = { node, fullTag, textStart: i };
-            stack.push(frame);
-            top = frame;
+            this.stack.push(frame);
+            this.top = frame;
         }
 
-        // Truncated input (a download cut mid-document, an unterminated CDATA
-        // section, a missing close tag): close the open elements instead of
-        // dropping everything parsed so far. Any trailing text belongs to the
-        // innermost element that is being closed here.
+        this.cursor = final ? len : (pending >= 0 ? pending : i);
+        if (!final) {
+            this.compact();
+        }
+    }
+
+    /**
+     * Parse one opening tag at `from` (just past `<`).
+     *
+     * Returns `null` when the tag is not complete and more input may follow; at
+     * `final` an unterminated tag is accepted as far as it goes, which is what
+     * keeps truncated documents usable.
+     */
+    private parseOpenTag(xml: string, from: number, len: number, final: boolean): OpenTag | null {
+        let j = from;
+        while (j < len) {
+            const ch = xml.charCodeAt(j);
+            if (isSpace(ch) || ch === SLASH || ch === GT) {
+                break;
+            }
+            j++;
+        }
+        if (j >= len && !final) {
+            return null;
+        }
+        const tag = xml.slice(from, j);
+        const node: XmlNode = { tagName: tag };
+        let selfClose = false;
+
+        while (j < len) {
+            let ch = xml.charCodeAt(j);
+            while (j < len && isSpace(ch)) {
+                ch = xml.charCodeAt(++j);
+            }
+            if (j >= len) {
+                break;
+            }
+            if (ch === GT) {
+                j++;
+                return { node, tag, selfClose, end: j };
+            }
+            if (ch === SLASH) {
+                selfClose = true;
+                j++;
+                continue;
+            }
+
+            const nameStart = j;
+            while (j < len) {
+                ch = xml.charCodeAt(j);
+                if (ch === EQUALS || isSpace(ch) || ch === GT || ch === SLASH) {
+                    break;
+                }
+                j++;
+            }
+            if (j >= len && !final) {
+                return null;
+            }
+            const attrName = xml.slice(nameStart, j);
+
+            while (j < len && isSpace(xml.charCodeAt(j))) {
+                j++;
+            }
+            if (j >= len && !final) {
+                return null;
+            }
+            if (xml.charCodeAt(j) === EQUALS) {
+                j++;
+                while (j < len && isSpace(xml.charCodeAt(j))) {
+                    j++;
+                }
+                if (j >= len && !final) {
+                    return null;
+                }
+                const q = xml.charCodeAt(j);
+                if (q === DQUOTE || q === SQUOTE) {
+                    j++;
+                    let valEnd = xml.indexOf(q === DQUOTE ? '"' : "'", j);
+                    if (valEnd < 0) {
+                        if (!final) {
+                            return null;
+                        }
+                        valEnd = len;
+                    }
+                    const raw = xml.slice(j, valEnd);
+                    node[attrName] = raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
+                    j = valEnd + 1;
+                }
+            } else if (attrName) {
+                node[attrName] = '';
+            }
+        }
+
+        if (!final) {
+            return null;
+        }
+        return { node, tag, selfClose, end: j };
+    }
+
+    /**
+     * Close elements still open at the end of input instead of dropping them:
+     * a truncated download keeps the document parsed so far.
+     */
+    private finish(): void {
+        const xml = this.buffer;
         let trailing = xml.length;
-        while (stack.length > 0) {
-            const frame = stack.pop()!;
+        while (this.stack.length > 0) {
+            const frame = this.stack.pop()!;
             const node = frame.node;
-            if (!node.children && trailing > frame.textStart) {
+            if (!frame.hasChild && trailing > frame.textStart) {
                 node.text = decodeContent(xml.slice(frame.textStart, trailing));
                 trailing = frame.textStart;
             }
-            const parentFrame = stack.length ? stack[stack.length - 1] : rootOwner;
+            const parentFrame = this.stack.length ? this.stack[this.stack.length - 1] : this.rootOwner;
             const parentNode = parentFrame ? parentFrame.node : undefined;
-            if (parentNode) {
-                if (parentNode.children) {
-                    parentNode.children.push(node);
-                } else {
-                    parentNode.children = [node];
-                }
-            } else {
-                roots.push(node);
-            }
+            this.attach(node, parentNode);
         }
-
-        return roots;
     }
 
+    /**
+     * Drop consumed input.
+     *
+     * Everything before the innermost open element is dead: its text has not
+     * been read yet, and ancestors with children never read theirs. Keeping the
+     * buffer from there is what makes a streamed document cost the pending text
+     * rather than the whole file.
+     */
+    private compact(): void {
+        let keepFrom = this.cursor;
+        for (let i = this.stack.length - 1; i >= 0; i--) {
+            const frame = this.stack[i];
+            if (!frame.hasChild) {
+                keepFrom = frame.textStart;
+                break;
+            }
+        }
+        if (keepFrom <= 0) {
+            return;
+        }
+        this.buffer = this.buffer.slice(keepFrom);
+        this.cursor -= keepFrom;
+        for (let i = 0; i < this.stack.length; i++) {
+            const frame = this.stack[i];
+            frame.textStart = frame.textStart > keepFrom ? frame.textStart - keepFrom : 0;
+        }
+        if (this.rootOwner) {
+            this.rootOwner.textStart = 0;
+        }
+    }
+
+    /** Parent of a node parsed with `queryParent: true`, otherwise `null`. */
     public getParent(node: any): any {
         if (this.queryParent) {
             return this.parentMap.get(node);
