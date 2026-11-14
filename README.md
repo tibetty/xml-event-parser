@@ -175,6 +175,49 @@ npm run bench:data    # generate ~27 MiB benchmark corpus (gitignored)
 npm run bench         # compare against txml / sax / htmlparser2 / fast-xml-parser
 ```
 
+## Releasing
+
+`release.yml` publishes with npm trusted publishing (OIDC) and is gated on the
+repository variable `NPM_TRUSTED_PUBLISHER`, which stays unset until a trusted
+publisher exists.
+
+One-time bootstrap, because npm cannot attach a trusted publisher to a package
+that does not exist yet:
+
+1. Publish the first version locally:
+
+   ```sh
+   npm login
+   npm publish --access public
+   ```
+
+2. npmjs.com -> Packages -> `xml-event-parser` -> Settings -> **Trusted
+   publishing** -> GitHub Actions:
+
+   | field | value |
+   | --- | --- |
+   | Organization or user | `tibetty` |
+   | Repository | `xml-event-parser` |
+   | Workflow filename | `release.yml` (filename only, case-sensitive) |
+   | Environment name | leave empty |
+   | Allowed actions | tick **npm publish** |
+
+   Configurations created after September 2026 default to `npm stage publish`
+   only, so `npm publish` has to be ticked explicitly. The first publish through
+   that workflow must complete within **two days**, or the configuration expires.
+
+3. GitHub -> Settings -> Secrets and variables -> Actions -> Variables: add
+   `NPM_TRUSTED_PUBLISHER` = `true`.
+
+4. Optional hardening, once a workflow publish has succeeded: npmjs.com ->
+   package Settings -> Publishing access -> *Require two-factor authentication
+   and disallow tokens*.
+
+After that, changing `version` in `package.json` on `main` publishes through
+`release.yml`, tags `v<version>` and creates the GitHub release. npm generates
+provenance automatically only for a public repository; from a private one the
+package is published without an attestation.
+
 ## License
 
 MIT. Includes work contributed to `osm2geojson-lite` by Harel Mazor.

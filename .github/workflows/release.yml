@@ -56,7 +56,9 @@ jobs:
         with:
           registry-url: 'https://registry.npmjs.org'
           node-version-file: .nvmrc
-          cache: npm
+          # npm recommends disabling the package-manager cache in release
+          # builds: a poisoned cache could end up in the published artifact.
+          package-manager-cache: false
 
       - name: Install
         run: npm ci
