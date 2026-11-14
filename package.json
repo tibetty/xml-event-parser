@@ -1,7 +1,23 @@
 {
   "name": "xml-event-parser",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Tiny dependency-free XML parser with a tree and path-based events in one pass",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tibetty/xml-event-parser.git"
+  },
+  "homepage": "https://github.com/tibetty/xml-event-parser#readme",
+  "bugs": {
+    "url": "https://github.com/tibetty/xml-event-parser/issues"
+  },
+  "keywords": [
+    "xml",
+    "parser",
+    "events",
+    "tree",
+    "streaming",
+    "zero-dependency"
+  ],
   "main": "dist/index.cjs",
   "scripts": {
     "build": "rolldown -c",
@@ -18,6 +34,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "fast-xml-parser": "^5.12.1",
     "htmlparser2": "^12.0.0",
