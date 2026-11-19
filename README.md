@@ -7,7 +7,7 @@ and path-based events in one pass.
 - **Bounded memory**: keep only the element you are reading. A 240 MB report
   parses in 82 MiB of RSS.
 - **Fast**: ~3.7x `sax` and ~5x `fast-xml-parser` on the same report.
-- **Portable**: 9.0 KiB minified / 3.2 KiB gzipped, zero dependencies, no
+- **Portable**: 13.7 KiB minified / 4.8 KiB gzipped, zero dependencies, no
   `node:*` imports in the core entry, no `eval`.
 - **One pass, two views**: a tree node and an `open`/`close` event per element.
 
@@ -180,16 +180,49 @@ parser.on('</osm.way>', (way) => {
 | `queryParent` | `false` | track parents for `parser.getParent(node)` |
 | `retain` | `'all'` | `'all'`, `'root'` or `'none'` (see [Streaming and retention](#streaming-and-retention)) |
 | `keep` | `[]` | under `retain: 'none'`, paths whose elements keep their subtree |
+| `strict` | `false` | throw an `XmlParseError` on the first well-formedness error (see [Strict mode](#strict-mode)) |
 
 `parse(xml, parent?, dir?)` can attach the parsed roots to an existing node and
 prefix event paths.
 
-Malformed input never throws: comments, processing instructions and doctypes
+By default, malformed input never throws: comments, processing instructions and doctypes
 are skipped, and elements still open at end of input are closed, so a truncated
 download yields the document parsed so far. CDATA content is kept verbatim and
 not entity-decoded; text outside CDATA is. As XML 1.0 requires, line endings
 become `\n`, and a literal tab or newline in an attribute value becomes a space.
 Whitespace written as a character reference, such as `&#10;`, is kept.
+
+### Strict mode
+
+`strict: true` rejects malformed input instead of recovering from it. It
+throws an `XmlParseError` that carries `line`, `column` (1-based) and `offset`
+(0-based, across every `write()`):
+
+```js
+import { XmlParser, XmlParseError } from 'xml-event-parser';
+
+try {
+    new XmlParser({ strict: true }).parse('<a><b></a>');
+} catch (error) {
+    if (error instanceof XmlParseError) {
+        console.log(error.message); // expected </b>, found </a> at line 1, column 7
+    }
+}
+```
+
+It checks:
+
+- close tags against the open element, and elements left open at the end;
+- unterminated tags, comments, CDATA sections, PIs and doctypes;
+- attributes that are unquoted, valueless or duplicated, or that contain `<`;
+- that there is exactly one root element, with no text outside it;
+- names, references, `]]>` in text, `--` in comments, the XML declaration,
+  and characters XML forbids.
+
+DTDs are skipped, not validated. Strict mode rejects every well-formedness
+case in the W3C `xmltest` suite except those inside a DTD. The default
+lenient path runs at the same speed with or without the option. In
+`createStream`, an error fails the stream.
 
 ## Benchmarks
 

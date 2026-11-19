@@ -159,6 +159,13 @@ describe('structure', () => {
         expect(parse('﻿<a/>')).toEqual([{ tagName: 'a' }]);
     });
 
+    it('skips a doctype internal subset with > inside quotes and comments', () => {
+        const xml = '<!DOCTYPE r [\n<!ELEMENT r (#PCDATA)>\n<!ENTITY e "a>]b">\n<!-- ]> -->\n]>\n<r>x</r>';
+        expect(parse(xml)).toEqual([{ tagName: 'r', text: 'x' }]);
+        expect(new XmlParser({ strict: true }).parse(xml)).toEqual([{ tagName: 'r', text: 'x' }]);
+        expect(parseChunked(xml, 1)).toEqual([{ tagName: 'r', text: 'x' }]);
+    });
+
     it('ignores the prolog, doctype and comments around the root', () => {
         const xml = '<?xml version="1.0"?>\n<!DOCTYPE r>\n<!-- c -->\n<r>x</r>\n<!-- after -->\n';
         expect(parse(xml)).toEqual([{ tagName: 'r', text: 'x' }]);

@@ -115,6 +115,7 @@ describe('differential: same tree as sax', () => {
             // XML 1.0 3.3.3, which sax does not apply: literal tabs and newlines in a value become spaces
             const expected = saxTree(xml, (value) => value.replace(/\r\n|[\t\n\r]/g, ' '));
             expect(new XmlParser().parse(xml), `seed ${seed}: ${xml}`).toEqual(expected);
+            expect(new XmlParser({ strict: true }).parse(xml), `seed ${seed} strict: ${xml}`).toEqual(expected);
 
             const parser = new XmlParser();
             for (let at = 0; at < xml.length;) {
