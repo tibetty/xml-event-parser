@@ -4,8 +4,8 @@
 
 | Version | Supported                  |
 | ------- | -------------------------- |
-| 0.3.x   | Yes                        |
-| < 0.3   | No — upgrade to the latest |
+| 0.4.x   | Yes                        |
+| < 0.4   | No — upgrade to the latest |
 
 Before 1.0.0, fixes land in the latest minor version only.
 

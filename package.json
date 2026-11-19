@@ -1,6 +1,6 @@
 {
   "name": "xml-event-parser",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Streaming XML parser with path-based events: constant memory, zero dependencies, 5.0 KiB",
   "repository": {
     "type": "git",
