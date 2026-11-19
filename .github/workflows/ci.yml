@@ -58,3 +58,26 @@ jobs:
 
       - name: Check exports and types
         run: npm run check:package
+
+  conformance:
+    name: W3C conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Download the W3C XML Conformance Test Suite
+        run: npm run conformance:data
+
+      - name: Test
+        run: npx vitest run test/conformance.test.ts
+        env:
+          XMLTS_REQUIRED: '1'
