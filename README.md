@@ -7,7 +7,7 @@ and path-based events in one pass.
 - **Bounded memory**: keep only the element you are reading. A 240 MB report
   parses in 82 MiB of RSS.
 - **Fast**: ~3.7x `sax` and ~5x `fast-xml-parser` on the same report.
-- **Portable**: 13.7 KiB minified / 4.8 KiB gzipped, zero dependencies, no
+- **Portable**: 14.3 KiB minified / 5.0 KiB gzipped, zero dependencies, no
   `node:*` imports in the core entry, no `eval`.
 - **One pass, two views**: a tree node and an `open`/`close` event per element.
 
@@ -110,7 +110,7 @@ Runnable examples, one per common job: [`examples/junit.mjs`](examples/junit.mjs
 interface XmlNode {
     tagName: string;          // element name
     children?: XmlNode[];     // present only when the element has child elements
-    text?: string;            // present only for text-only elements
+    text?: string;            // present only for text-only elements and #text nodes
     [attribute: string]: any; // attributes, flat on the node
 }
 ```
@@ -180,6 +180,7 @@ parser.on('</osm.way>', (way) => {
 | `queryParent` | `false` | track parents for `parser.getParent(node)` |
 | `retain` | `'all'` | `'all'`, `'root'` or `'none'` (see [Streaming and retention](#streaming-and-retention)) |
 | `keep` | `[]` | under `retain: 'none'`, paths whose elements keep their subtree |
+| `mixed` | `false` | keep text around child elements as `#text` children (see [Mixed content](#mixed-content)) |
 | `strict` | `false` | throw an `XmlParseError` on the first well-formedness error (see [Strict mode](#strict-mode)) |
 
 `parse(xml, parent?, dir?)` can attach the parsed roots to an existing node and
@@ -191,6 +192,27 @@ download yields the document parsed so far. CDATA content is kept verbatim and
 not entity-decoded; text outside CDATA is. As XML 1.0 requires, line endings
 become `\n`, and a literal tab or newline in an attribute value becomes a space.
 Whitespace written as a character reference, such as `&#10;`, is kept.
+
+### Mixed content
+
+By default, an element with child elements keeps no text, which suits
+data-shaped XML. For document-shaped XML, such as XHTML fragments, DocBook,
+RSS descriptions or test failure messages with inline markup, `mixed: true`
+keeps each run of text between children as a `#text` child, in document order:
+
+```js
+new XmlParser({ mixed: true }).parse('<p>a <b>bold</b> c</p>');
+// [{ tagName: 'p', children: [
+//     { tagName: '#text', text: 'a ' },
+//     { tagName: 'b', text: 'bold' },
+//     { tagName: '#text', text: ' c' },
+// ] }]
+```
+
+Runs are entity-decoded, CDATA is merged in, comments and PIs are dropped, and
+whitespace-only runs are kept. Elements without child elements keep their
+`text` field. Text nodes emit no events, and they follow `retain` and `keep`
+like any other child.
 
 ### Strict mode
 
