@@ -7,6 +7,11 @@ contain breaking changes; they are listed under "Upgrading".
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-19
+
+Two opt-in modes: strict well-formedness checking and mixed content. Neither changes the default
+output or its speed.
+
 ### Added
 
 - `mixed: true` keeps the text around child elements as `{ tagName: '#text', text }` children,
@@ -126,7 +131,8 @@ First release, extracted from [osm2geojson-lite](https://github.com/tibetty/osm2
 - Conditioned event paths, which needed `new Function`, are removed: the parser contains no
   `eval`.
 
-[Unreleased]: https://github.com/tibetty/xml-event-parser/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/tibetty/xml-event-parser/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/tibetty/xml-event-parser/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tibetty/xml-event-parser/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/tibetty/xml-event-parser/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/tibetty/xml-event-parser/compare/v0.2.0...v0.2.1
