@@ -152,7 +152,9 @@ new XmlParser({
 | `'</osm.way>'` | when it closes, with `children` populated |
 
 The path is the dotted chain from the document root, not just the element name:
-`'</osm.way>'`, never `'</way>'`. The same applies to `keep`. Filter inside the
+`'</osm.way>'`, never `'</way>'`. The same applies to `keep`. `on()` throws a
+`TypeError` for a name that is not in one of the two bracketed forms, so a bare
+`'osm.way'` fails loudly instead of never firing. Filter inside the
 listener:
 
 ```js

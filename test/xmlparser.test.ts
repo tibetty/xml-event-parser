@@ -366,11 +366,11 @@ describe('XmlParser progressive events', () => {
         expect(other).not.toHaveBeenCalled();
     });
 
-    it('accepts and removes non-tag event names', () => {
+    it('rejects non-tag event names, and removing one is a no-op', () => {
         const parser = new XmlParser({ progressive: true });
         const fn = vi.fn();
-        parser.addListener('custom-event', fn);
-        parser.removeListener('custom-event', fn);
+        expect(() => parser.addListener('custom-event', fn)).toThrow(TypeError);
+        expect(() => parser.removeListener('custom-event', fn)).not.toThrow();
         parser.parse('<a/>');
         expect(fn).not.toHaveBeenCalled();
     });
@@ -381,6 +381,48 @@ describe('XmlParser progressive events', () => {
         parser.on('</root.a>', fn);
         parser.parse('<root><a/></root>');
         expect(fn).not.toHaveBeenCalled();
+    });
+});
+
+describe('event names', () => {
+    it('rejects names that are not in bracketed form', () => {
+        const parser = new XmlParser({ progressive: true });
+        for (const name of ['a.b', 'a', '', '<a', 'a>', '</>', '<>', '<a b>', '<a..b>', '<.a>', '<a.>', '< a>']) {
+            expect(() => parser.on(name, () => {}), name).toThrow(TypeError);
+        }
+        expect(() => parser.on('<a.b>', () => {})).not.toThrow();
+        expect(() => parser.on('</a:b.c-d_1>', () => {})).not.toThrow();
+    });
+
+    it('names the accepted forms in the error', () => {
+        expect(() => new XmlParser().on('a.b', () => {})).toThrow(/'<a\.b>'.*'<\/a\.b>'/);
+    });
+
+    it('stops watching a path once its last listener is removed', () => {
+        const parser: any = new XmlParser({ progressive: true });
+        const open = () => {};
+        const close = () => {};
+        parser.on('<r.a>', open);
+        parser.on('</r.a>', close);
+        parser.off('<r.a>', open);
+        expect(parser.watchedPaths.has('r.a')).toBe(true);
+        parser.off('</r.a>', close);
+        expect(parser.watchedPaths.has('r.a')).toBe(false);
+        expect(parser.watchedChildren.get('r')?.has('a') ?? false).toBe(false);
+        parser.on('</top>', close);
+        parser.off('</top>', close);
+        expect(parser.watchedTopLevel.has('top')).toBe(false);
+    });
+
+    it('keeps firing remaining listeners after another is removed', () => {
+        const parser = new XmlParser({ progressive: true });
+        const seen: string[] = [];
+        const a = () => seen.push('a');
+        parser.on('</r.i>', a);
+        parser.on('</r.i>', () => seen.push('b'));
+        parser.off('</r.i>', a);
+        parser.parse('<r><i/><i></i></r>');
+        expect(seen).toEqual(['b', 'b']);
     });
 });
 
