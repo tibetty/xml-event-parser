@@ -105,6 +105,22 @@ export function decodeEntities(value: string): string {
     return copied === 0 ? value : out + value.slice(copied);
 }
 
+const CRLF = /\r\n?/g;
+const ATTR_SPACE = /\r\n|[\t\n\r]/g;
+
+/**
+ * Normalise and decode an attribute value (XML 1.0 §3.3.3): a literal tab, CR,
+ * LF or CRLF pair becomes one space before entities are decoded, so whitespace
+ * written as a character reference (`&#10;`) survives. The caller says whether
+ * the value holds any of those characters (see `XmlParser.hasControl`).
+ */
+function decodeAttribute(raw: string, hasControl: boolean): string {
+    if (hasControl) {
+        raw = raw.replace(ATTR_SPACE, ' ');
+    }
+    return raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
+}
+
 /**
  * Decode the content of a text-only element. CDATA sections contribute their
  * text verbatim (per XML, entities inside CDATA are not references), comments
@@ -113,7 +129,10 @@ export function decodeEntities(value: string): string {
  * existing fast path. An unterminated comment or PI (truncated input) drops
  * the rest; an unterminated CDATA section keeps it.
  */
-function decodeContent(raw: string): string {
+function decodeContent(raw: string, hasCR: boolean): string {
+    if (hasCR) {
+        raw = raw.replace(CRLF, '\n'); // XML 1.0 §2.11 end-of-line handling
+    }
     let lt = raw.indexOf('<');
     if (lt < 0) {
         return raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
@@ -280,6 +299,15 @@ export class XmlParser {
     private stack: Frame[] = [];
     private roots: XmlNode[] = [];
     private top: Frame | undefined;
+    /**
+     * Per control character (tab, LF, CR - see `slotOf`), the next position in
+     * `buffer` at or after `nextFrom`, or `Infinity` when there is none. Asking
+     * whether a short attribute value or text run holds one is then a compare
+     * instead of a scan, and each character class is scanned once per
+     * occurrence rather than once per value. Reset whenever `buffer` changes.
+     */
+    private nextAt: number[] = [-1, -1, -1];
+    private nextFrom: number[] = [Infinity, Infinity, Infinity];
     private rootOwner: Frame | undefined;
     private basePath: string = '';
     private active: boolean = false;
@@ -405,6 +433,8 @@ export class XmlParser {
 
     /** Scan everything in `buffer` that is complete, or all of it at `end()`. */
     private consume(final: boolean): void {
+        this.nextAt = [-1, -1, -1];
+        this.nextFrom = [Infinity, Infinity, Infinity];
         const xml = this.buffer;
         const len = xml.length;
         const progressive = this.progressive;
@@ -446,7 +476,7 @@ export class XmlParser {
                 const parentNode = parentFrame ? parentFrame.node : undefined;
 
                 if (!frame.hasChild && lt > frame.textStart) {
-                    const text = decodeContent(xml.slice(frame.textStart, lt));
+                    const text = decodeContent(xml.slice(frame.textStart, lt), this.has(CR, frame.textStart, lt));
                     if (text) {
                         node.text = text;
                     }
@@ -642,7 +672,7 @@ export class XmlParser {
                         valEnd = len;
                     }
                     const raw = xml.slice(j, valEnd);
-                    setAttribute(node, attrName, raw.indexOf('&') < 0 ? raw : decodeEntities(raw));
+                    setAttribute(node, attrName, decodeAttribute(raw, this.hasControl(j, valEnd)));
                     j = valEnd + 1;
                 }
             } else if (attrName) {
@@ -667,7 +697,8 @@ export class XmlParser {
             const frame = this.stack.pop()!;
             const node = frame.node;
             if (!frame.hasChild && trailing > frame.textStart) {
-                const text = decodeContent(xml.slice(frame.textStart, trailing));
+                const raw = xml.slice(frame.textStart, trailing);
+                const text = decodeContent(raw, raw.indexOf('\r') >= 0);
                 if (text) {
                     node.text = text;
                 }
@@ -708,6 +739,26 @@ export class XmlParser {
         if (this.rootOwner) {
             this.rootOwner.textStart = 0;
         }
+    }
+
+    /** Whether `buffer[from, to)` holds the control character `code`. */
+    private has(code: number, from: number, to: number): boolean {
+        const slot = code === TAB ? 0 : code === LF ? 1 : 2;
+        let at = this.nextAt[slot];
+        if (from < this.nextFrom[slot] || from > at) {
+            at = this.buffer.indexOf(String.fromCharCode(code), from);
+            if (at < 0) {
+                at = Infinity;
+            }
+            this.nextAt[slot] = at;
+            this.nextFrom[slot] = from;
+        }
+        return at < to;
+    }
+
+    /** Whether `buffer[from, to)` holds a tab, LF or CR. */
+    private hasControl(from: number, to: number): boolean {
+        return this.has(LF, from, to) || this.has(TAB, from, to) || this.has(CR, from, to);
     }
 
     /** Parent of a node parsed with `queryParent: true`, otherwise `null`. */

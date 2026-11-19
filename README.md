@@ -176,7 +176,9 @@ prefix event paths.
 Malformed input never throws: comments, processing instructions and doctypes
 are skipped, and elements still open at end of input are closed, so a truncated
 download yields the document parsed so far. CDATA content is kept verbatim and
-not entity-decoded; text outside CDATA is.
+not entity-decoded; text outside CDATA is. As XML 1.0 requires, line endings
+become `\n`, and a literal tab or newline in an attribute value becomes a space.
+Whitespace written as a character reference, such as `&#10;`, is kept.
 
 ## Benchmarks
 
