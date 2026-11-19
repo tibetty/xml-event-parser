@@ -9,6 +9,8 @@ contain breaking changes; they are listed under "Upgrading".
 
 ### Added
 
+- `mixed: true` keeps the text around child elements as `{ tagName: '#text', text }` children,
+  in document order ([#8]).
 - `strict: true` throws an `XmlParseError` with `line`, `column` and `offset` on the first
   well-formedness error. The lenient default and its speed do not change ([#7]).
 
@@ -19,8 +21,8 @@ contain breaking changes; they are listed under "Upgrading".
 
 ### Changed
 
-- The core entry is 13.7 KiB minified and 4.8 KiB gzipped, up from 9.0 KiB and 3.2 KiB, for
-  strict mode.
+- The core entry is 14.3 KiB minified and 5.0 KiB gzipped, up from 9.0 KiB and 3.2 KiB, for
+  strict mode and mixed content.
 
 ## [0.3.0] - 2026-11-19
 
@@ -138,6 +140,7 @@ First release, extracted from [osm2geojson-lite](https://github.com/tibetty/osm2
 [#5]: https://github.com/tibetty/xml-event-parser/issues/5
 [#6]: https://github.com/tibetty/xml-event-parser/issues/6
 [#7]: https://github.com/tibetty/xml-event-parser/issues/7
+[#8]: https://github.com/tibetty/xml-event-parser/issues/8
 [#9]: https://github.com/tibetty/xml-event-parser/issues/9
 [#11]: https://github.com/tibetty/xml-event-parser/issues/11
 [#19]: https://github.com/tibetty/xml-event-parser/issues/19

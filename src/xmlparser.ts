@@ -375,6 +375,15 @@ export interface XmlParserOptions {
      * DTDs are still skipped, not validated.
      */
     strict?: boolean;
+    /**
+     * Keep the text around child elements: each run of text between them
+     * becomes a `{ tagName: '#text', text }` entry in `children`, in document
+     * order, so `<p>a<b>x</b>c</p>` keeps `a` and `c`. Runs are entity-decoded,
+     * CDATA is merged in, comments and PIs are dropped, and whitespace-only
+     * runs are kept. Elements without child elements keep their `text` field.
+     * Text nodes emit no events. Default `false`.
+     */
+    mixed?: boolean;
 }
 
 interface OpenTag {
@@ -413,6 +422,7 @@ export class XmlParser {
      */
     private pathDepth: number = 0;
     private strict: boolean = false;
+    private mixed: boolean = false;
     /** Strict mode only: characters, LFs and the last line's length dropped by `compact()`. */
     private dropped: number = 0;
     private droppedLines: number = 0;
@@ -449,6 +459,7 @@ export class XmlParser {
             this.queryParent = opts.queryParent === true;
             this.progressive = opts.progressive === true;
             this.strict = opts.strict === true;
+            this.mixed = opts.mixed === true;
             if (opts.retain) {
                 this.retain = opts.retain;
             }
@@ -637,11 +648,15 @@ export class XmlParser {
                 const parentFrame = this.stack.length ? this.stack[this.stack.length - 1] : this.rootOwner;
                 const parentNode = parentFrame ? parentFrame.node : undefined;
 
-                if (!frame.hasChild && lt > frame.textStart) {
-                    const text = decodeContent(xml.slice(frame.textStart, lt), this.has(CR, frame.textStart, lt));
-                    if (text) {
-                        node.text = text;
+                if (!frame.hasChild) {
+                    if (lt > frame.textStart) {
+                        const text = decodeContent(xml.slice(frame.textStart, lt), this.has(CR, frame.textStart, lt));
+                        if (text) {
+                            node.text = text;
+                        }
                     }
+                } else if (this.mixed) {
+                    this.flushRun(frame, xml, lt);
                 }
 
                 if (progressive && frame.depth <= this.pathDepth && this.watchedPaths.has(frame.fullTag)) {
@@ -651,6 +666,9 @@ export class XmlParser {
                 this.attach(node, parentNode, parentFrame ? parentFrame.keep === true : false);
                 if (parentFrame) {
                     parentFrame.hasChild = true;
+                    if (this.mixed) {
+                        parentFrame.textStart = i;
+                    }
                 }
                 this.top = parentFrame;
                 continue;
@@ -747,6 +765,11 @@ export class XmlParser {
                 this.parentMap.set(node, parentNode);
             }
 
+            if (this.mixed && this.top !== undefined && this.top !== this.rootOwner) {
+                this.flushRun(this.top, xml, lt);
+                this.top.hasChild = true;
+            }
+
             // '?'/'!' prefixed tags were already routed above; treat trailing
             // '/' (and the implicitly self-closing prolog tags) as leaves.
             const depth = (this.top ? this.top.depth : this.baseDepth) + 1;
@@ -768,6 +791,9 @@ export class XmlParser {
                 this.attach(node, parentNode, this.top ? this.top.keep === true : false);
                 if (this.top) {
                     this.top.hasChild = true;
+                    if (this.mixed) {
+                        this.top.textStart = i;
+                    }
                 }
                 continue;
             }
@@ -941,10 +967,17 @@ export class XmlParser {
             }
         }
         let trailing = xml.length;
+        let innermost = true;
         while (this.stack.length > 0) {
             const frame = this.stack.pop()!;
             const node = frame.node;
-            if (!frame.hasChild && trailing > frame.textStart) {
+            if (this.mixed && frame.hasChild) {
+                // only the innermost element has an open run; its ancestors'
+                // runs ended where their open child began
+                if (innermost) {
+                    this.flushRun(frame, xml, trailing);
+                }
+            } else if (!frame.hasChild && trailing > frame.textStart) {
                 const raw = xml.slice(frame.textStart, trailing);
                 const text = decodeContent(raw, raw.indexOf('\r') >= 0);
                 if (text) {
@@ -952,9 +985,25 @@ export class XmlParser {
                 }
                 trailing = frame.textStart;
             }
+            innermost = false;
             const parentFrame = this.stack.length ? this.stack[this.stack.length - 1] : this.rootOwner;
             const parentNode = parentFrame ? parentFrame.node : undefined;
             this.attach(node, parentNode, parentFrame ? parentFrame.keep === true : false);
+        }
+    }
+
+    /**
+     * Mixed mode: attach the text of `frame` from its run start to `end` as a
+     * `#text` child, if it decodes to anything.
+     */
+    private flushRun(frame: Frame, xml: string, end: number): void {
+        if (end <= frame.textStart) {
+            return;
+        }
+        const raw = xml.slice(frame.textStart, end);
+        const text = decodeContent(raw, raw.indexOf('\r') >= 0);
+        if (text) {
+            this.attach({ tagName: '#text', text }, frame.node, frame.keep === true);
         }
     }
 
@@ -968,7 +1017,11 @@ export class XmlParser {
      */
     private compact(): void {
         let keepFrom = this.cursor;
-        for (let i = this.stack.length - 1; i >= 0; i--) {
+        if (this.mixed && this.stack.length > 0) {
+            // the innermost element's current run is the only text still needed
+            keepFrom = Math.min(keepFrom, this.stack[this.stack.length - 1].textStart);
+        }
+        for (let i = this.stack.length - 1; i >= 0 && !this.mixed; i--) {
             const frame = this.stack[i];
             if (!frame.hasChild) {
                 keepFrom = frame.textStart;

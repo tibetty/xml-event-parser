@@ -1,7 +1,7 @@
 {
   "name": "xml-event-parser",
   "version": "0.3.0",
-  "description": "Streaming XML parser with path-based events: constant memory, zero dependencies, 4.8 KiB",
+  "description": "Streaming XML parser with path-based events: constant memory, zero dependencies, 5.0 KiB",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tibetty/xml-event-parser.git"
