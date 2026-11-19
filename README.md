@@ -142,7 +142,16 @@ new XmlParser({
 });
 ```
 
-`createStream` applies `keep` for you from its `event` path.
+`createStream` applies `keep` for you from its `event` path. It decodes bytes
+in the encoding the document declares (XML 1.0 Appendix F):
+
+1. A byte-order mark for UTF-8 or UTF-16, if there is one.
+2. Otherwise, the `encoding` of the XML declaration.
+3. Otherwise, UTF-8.
+
+Any encoding `TextDecoder` supports works, including ISO-8859-1, Shift_JIS and
+GBK. An unsupported encoding fails the stream with an error. The core entry
+takes strings, so there the caller decodes.
 
 ### Events
 
