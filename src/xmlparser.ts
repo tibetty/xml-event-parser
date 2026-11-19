@@ -106,35 +106,51 @@ export function decodeEntities(value: string): string {
 }
 
 /**
- * Decode element content: CDATA sections contribute their text verbatim (per
- * XML, entities inside CDATA are not references), everything else is
- * entity-decoded. The common case - no CDATA - is one `indexOf` and the
- * existing fast path.
+ * Decode the content of a text-only element. CDATA sections contribute their
+ * text verbatim (per XML, entities inside CDATA are not references), comments
+ * and processing instructions contribute nothing, and everything else is
+ * entity-decoded. The common case - no markup - is one `indexOf` and the
+ * existing fast path. An unterminated comment or PI (truncated input) drops
+ * the rest; an unterminated CDATA section keeps it.
  */
 function decodeContent(raw: string): string {
-    if (raw.indexOf('<![CDATA[') < 0) {
+    let lt = raw.indexOf('<');
+    if (lt < 0) {
         return raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
     }
     let out = '';
     let at = 0;
-    while (at < raw.length) {
-        const start = raw.indexOf('<![CDATA[', at);
-        if (start < 0) {
-            out += decodeEntities(raw.slice(at));
-            break;
+    while (lt >= 0) {
+        if (lt > at) {
+            out += decodeEntities(raw.slice(at, lt));
         }
-        if (start > at) {
-            out += decodeEntities(raw.slice(at, start));
+        let end: number;
+        if (raw.startsWith('<![CDATA[', lt)) {
+            end = raw.indexOf(']]>', lt + 9);
+            if (end < 0) {
+                return out + raw.slice(lt + 9);
+            }
+            out += raw.slice(lt + 9, end);
+            at = end + 3;
+        } else if (raw.startsWith('<!--', lt)) {
+            end = raw.indexOf('-->', lt + 4);
+            if (end < 0) {
+                return out;
+            }
+            at = end + 3;
+        } else if (raw.charCodeAt(lt + 1) === 63) { // '?'
+            end = raw.indexOf('?>', lt + 2);
+            if (end < 0) {
+                return out;
+            }
+            at = end + 2;
+        } else {
+            out += '<';
+            at = lt + 1;
         }
-        const end = raw.indexOf(']]>', start + 9);
-        if (end < 0) {
-            out += raw.slice(start + 9);
-            break;
-        }
-        out += raw.slice(start + 9, end);
-        at = end + 3;
+        lt = raw.indexOf('<', at);
     }
-    return out;
+    return at < raw.length ? out + decodeEntities(raw.slice(at)) : out;
 }
 
 // character codes used by the scanner
@@ -430,7 +446,10 @@ export class XmlParser {
                 const parentNode = parentFrame ? parentFrame.node : undefined;
 
                 if (!frame.hasChild && lt > frame.textStart) {
-                    node.text = decodeContent(xml.slice(frame.textStart, lt));
+                    const text = decodeContent(xml.slice(frame.textStart, lt));
+                    if (text) {
+                        node.text = text;
+                    }
                 }
 
                 if (progressive && this.watchedPaths.has(frame.fullTag)) {
@@ -447,7 +466,7 @@ export class XmlParser {
 
             if (c === QUESTION) {
                 // processing instruction: <? ... ?>
-                const gt = xml.indexOf('>', i);
+                const gt = xml.indexOf('?>', i + 1);
                 if (gt < 0) {
                     if (!final) {
                         break;
@@ -455,7 +474,7 @@ export class XmlParser {
                     i = len;
                     break;
                 }
-                i = gt + 1;
+                i = gt + 2;
                 pending = -1;
                 continue;
             }
@@ -648,7 +667,10 @@ export class XmlParser {
             const frame = this.stack.pop()!;
             const node = frame.node;
             if (!frame.hasChild && trailing > frame.textStart) {
-                node.text = decodeContent(xml.slice(frame.textStart, trailing));
+                const text = decodeContent(xml.slice(frame.textStart, trailing));
+                if (text) {
+                    node.text = text;
+                }
                 trailing = frame.textStart;
             }
             const parentFrame = this.stack.length ? this.stack[this.stack.length - 1] : this.rootOwner;
