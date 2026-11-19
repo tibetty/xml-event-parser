@@ -75,7 +75,9 @@ the first publish is local:
 
 ### Cutting a release
 
-Change `version` in `package.json` on `main`. `release.yml` then publishes
+Open a `chore(release): X.Y.Z` PR that changes `version` in `package.json` and moves
+the `## [Unreleased]` entries in `CHANGELOG.md` under the new version. Once it is
+merged to `main`, `release.yml` publishes
 through OIDC, tags `v<version>` and creates the GitHub release. npm generates
 provenance automatically for a public repository.
 
