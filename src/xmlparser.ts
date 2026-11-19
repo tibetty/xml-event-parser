@@ -199,6 +199,9 @@ function normalizePath(path: string): string {
     return path.slice(start, end);
 }
 
+/** `'<a.b>'` or `'</a.b>'`: non-empty dotted segments without spaces or markup. */
+const EVENT_NAME = /^<\/?[^\s<>/.]+(?:\.[^\s<>/.]+)*>$/;
+
 function isSpace(c: number): boolean {
     return c === SPACE || c === TAB || c === LF || c === CR;
 }
@@ -795,6 +798,13 @@ export class XmlParser {
     }
 
     private $addListener(evt: string, func: XmlListener) {
+        if (!EVENT_NAME.test(evt)) {
+            const path = evt.replace(/^<\/?|>$/g, '') || 'root.child';
+            throw new TypeError(
+                `Invalid event name ${JSON.stringify(evt)}: use '<${path}>' for an opening `
+                + `element or '</${path}>' for a closing one, with the dotted path from the root`,
+            );
+        }
         const funcs = this.evtListeners[evt];
         if (funcs) {
             funcs.push(func);
@@ -829,10 +839,34 @@ export class XmlParser {
         if (funcs) {
             idx = funcs.indexOf(func);
         }
-        if (idx >= 0) {
-            funcs.splice(idx, 1);
-            if (evt.charCodeAt(1) !== SLASH) {
-                this.openListenerCount--;
+        if (idx < 0) {
+            return;
+        }
+        funcs.splice(idx, 1);
+        const close = evt.charCodeAt(1) === SLASH;
+        if (!close) {
+            this.openListenerCount--;
+        }
+        if (funcs.length > 0) {
+            return;
+        }
+        delete this.evtListeners[evt];
+        const path = evt.slice(close ? 2 : 1, evt.length - 1);
+        if (this.evtListeners[close ? '<' + path + '>' : '</' + path + '>']) {
+            return;
+        }
+        this.watchedPaths.delete(path);
+        const dot = path.lastIndexOf('.');
+        if (dot < 0) {
+            this.watchedTopLevel.delete(path);
+            return;
+        }
+        const parent = path.slice(0, dot);
+        const children = this.watchedChildren.get(parent);
+        if (children) {
+            children.delete(path.slice(dot + 1));
+            if (children.size === 0) {
+                this.watchedChildren.delete(parent);
             }
         }
     }
