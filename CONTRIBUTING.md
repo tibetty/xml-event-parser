@@ -11,8 +11,10 @@ npm ci
 | command | purpose |
 | --- | --- |
 | `npm test` | unit tests |
+| `npm run coverage` | unit tests with the coverage floor in `vitest.config.ts` |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run build` | `dist/index.{mjs,cjs,d.ts}` and `dist/stream.{mjs,cjs,d.ts}` |
+| `npm run build` | `dist/index.{mjs,cjs,d.mts,d.cts}` and `dist/stream.{mjs,cjs,d.mts,d.cts}` |
+| `npm run check:package` | `publint` and `attw`: exports and types resolve for ESM and CommonJS consumers |
 | `npm run bench:data` | generate the ~27 MiB speed corpus (gitignored) |
 | `npm run bench` | speed against `txml`, `sax`, `htmlparser2`, `fast-xml-parser` |
 | `npm run bench:memory` | time and peak RSS on 60 MB and 240 MB JUnit reports, each parser capped at 512 MB of heap |
