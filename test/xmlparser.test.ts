@@ -201,6 +201,36 @@ describe('CDATA', () => {
     });
 });
 
+describe('markup inside text', () => {
+    it('drops comments and processing instructions from text', () => {
+        expect(parse('<a>x<!-- c -->y</a>')[0].text).toBe('xy');
+        expect(parse('<a>x<?pi z?>y</a>')[0].text).toBe('xy');
+        expect(parse('<a><!-- only --></a>')[0].text).toBeUndefined();
+        expect(parse('<a>x<?pi a>b?>y</a>')[0].text).toBe('xy');
+        expect(parse('<a>x<!-- <b>not a tag</b> -->y</a>')[0]).toEqual({ tagName: 'a', text: 'xy' });
+    });
+
+    it('keeps comment and PI syntax inside CDATA verbatim', () => {
+        expect(parse('<a><![CDATA[<!-- c --><?pi?>]]></a>')[0].text).toBe('<!-- c --><?pi?>');
+        expect(parse('<a>&lt;<!--c--><![CDATA[&amp;]]>&gt;</a>')[0].text).toBe('<&amp;>');
+    });
+
+    it('drops an unterminated comment or PI at end of input', () => {
+        expect(parse('<a>x<!-- c')[0].text).toBe('x');
+        expect(parse('<a>x<?pi')[0].text).toBe('x');
+    });
+
+    it('drops a comment split across chunks at every point', () => {
+        const xml = '<r><a>x<!-- c -->y</a></r>';
+        for (let cut = 1; cut < xml.length; cut++) {
+            const parser = new XmlParser();
+            parser.write(xml.slice(0, cut));
+            parser.write(xml.slice(cut));
+            expect(parser.end()[0].children![0].text).toBe('xy');
+        }
+    });
+});
+
 describe('XmlParser progressive events', () => {
     it('emits open and close events with parent nodes', () => {
         const parser = new XmlParser({ progressive: true });
