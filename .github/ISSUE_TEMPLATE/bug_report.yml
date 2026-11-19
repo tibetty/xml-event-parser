@@ -1,0 +1,51 @@
+name: Bug report
+description: The parser produces the wrong tree or events, throws, or the package does not install or type-check
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: xml-event-parser version
+      placeholder: 0.2.2
+    validations:
+      required: true
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      placeholder: Node 24.1.0, Chrome 140, Cloudflare Workers…
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Tree output, Events, Streaming (write/end), createStream, TypeScript types, Package install, Other]
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The smallest XML input and the call that shows the problem.
+      render: js
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the error message and stack trace if there is one.
+    validations:
+      required: true
