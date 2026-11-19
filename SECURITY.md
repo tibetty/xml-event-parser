@@ -37,8 +37,9 @@ one of them is a vulnerability:
   nesting depth plus the largest element listed in `keep` and the pending text. With
   `retain: 'root'`, it is bounded by the largest root. With `retain: 'all'` (the default), the
   whole tree is kept by design.
-- **No throw on malformed input.** Malformed or truncated documents are parsed as far as they
-  go. A listener you register can still throw.
+- **No throw on malformed input by default.** Malformed or truncated documents are parsed as
+  far as they go. With `strict: true`, the only error thrown is `XmlParseError`. A listener you
+  register can still throw.
 - **Linear time on whole input.** Scanning a complete string is linear in its size. One limit
   is known: a construct that is still open is rescanned on each `write()`. A single very large
   tag, comment or CDATA section delivered in many small chunks therefore costs more than linear

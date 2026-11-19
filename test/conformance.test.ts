@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { XmlParser } from '../src/xmlparser';
+import { XmlParseError, XmlParser } from '../src/xmlparser';
 import { saxTree } from './sax-tree';
 
 /**
@@ -16,6 +16,7 @@ import { saxTree } from './sax-tree';
  * those declarations.
  */
 const DIR = '.cache/xmlts/xmlconf/xmltest/valid/sa/';
+const NOT_WF = '.cache/xmlts/xmlconf/xmltest/not-wf/sa/';
 const present = existsSync(DIR);
 
 /** Decode by byte-order mark, as a caller of the core entry must. */
@@ -50,8 +51,31 @@ describe('W3C xmltest valid/sa', () => {
             const canonical = readFileSync(`${DIR}out/${name}`, 'utf8').replace(/<\?[\s\S]*?\?>/g, '');
             const expected = saxTree(canonical);
             expect(new XmlParser().parse(source), name).toEqual(expected);
+            expect(new XmlParser({ strict: true }).parse(source), `${name} strict`).toEqual(expected);
             checked++;
         }
         expect(checked).toBe(57);
+    });
+
+    // Strict mode skips DTDs instead of validating them, and the core entry takes
+    // decoded strings, so documents with a doctype or with bytes that are not
+    // UTF-8 are out of scope. Every other not-well-formed document is rejected.
+    it.skipIf(!present)('rejects every in-scope not-well-formed document in strict mode', () => {
+        const files = readdirSync(NOT_WF).filter((name) => name.endsWith('.xml')).sort();
+        let checked = 0;
+        for (const name of files) {
+            let source: string;
+            try {
+                source = new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(NOT_WF + name));
+            } catch {
+                continue;
+            }
+            if (source.includes('<!DOCTYPE')) {
+                continue;
+            }
+            expect(() => new XmlParser({ strict: true }).parse(source), name).toThrow(XmlParseError);
+            checked++;
+        }
+        expect(checked).toBe(85);
     });
 });
