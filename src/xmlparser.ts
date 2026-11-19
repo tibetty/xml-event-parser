@@ -129,6 +129,22 @@ function isSpace(c: number): boolean {
     return c === SPACE || c === TAB || c === LF || c === CR;
 }
 
+/**
+ * Copy an attribute onto a node. `tagName`, `children` and `text` belong to the
+ * parser, so attributes with those names are dropped. `__proto__` is defined as
+ * an own data property, so input cannot change a node's prototype.
+ */
+function setAttribute(node: XmlNode, name: string, value: string): void {
+    if (name === 'tagName' || name === 'children' || name === 'text') {
+        return;
+    }
+    if (name === '__proto__') {
+        Object.defineProperty(node, name, { value, writable: true, enumerable: true, configurable: true });
+        return;
+    }
+    node[name] = value;
+}
+
 interface Frame {
     node: XmlNode;
     fullTag: string;
@@ -568,11 +584,11 @@ export class XmlParser {
                         valEnd = len;
                     }
                     const raw = xml.slice(j, valEnd);
-                    node[attrName] = raw.indexOf('&') < 0 ? raw : decodeEntities(raw);
+                    setAttribute(node, attrName, raw.indexOf('&') < 0 ? raw : decodeEntities(raw));
                     j = valEnd + 1;
                 }
             } else if (attrName) {
-                node[attrName] = '';
+                setAttribute(node, attrName, '');
             }
         }
 

@@ -116,8 +116,9 @@ interface XmlNode {
 ```
 
 An element is emitted on close after its children are attached, so
-`node.children` is complete inside a close listener. Attributes whose names
-collide with `tagName`, `children` or `text` are shadowed by those fields.
+`node.children` is complete inside a close listener. Attributes named
+`tagName`, `children` or `text` are dropped, because those fields belong to the
+parser. Any other name, `__proto__` included, is stored as an own property.
 
 ### Streaming and retention
 
