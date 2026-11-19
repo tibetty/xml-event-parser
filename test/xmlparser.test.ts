@@ -231,6 +231,55 @@ describe('markup inside text', () => {
     });
 });
 
+describe('XML 1.0 normalisation', () => {
+    it('normalises CRLF and lone CR to LF in text (2.11)', () => {
+        expect(parse('<a>x\r\ny\rz\n</a>')[0].text).toBe('x\ny\nz\n');
+        expect(parse('<a><![CDATA[x\r\ny]]></a>')[0].text).toBe('x\ny');
+    });
+
+    it('keeps a CR written as a character reference', () => {
+        expect(parse('<a>x&#13;y</a>')[0].text).toBe('x\ry');
+    });
+
+    it('normalises a CRLF split across chunks', () => {
+        const parser = new XmlParser();
+        parser.write('<a>x\r');
+        parser.write('\ny</a>');
+        expect(parser.end()[0].text).toBe('x\ny');
+    });
+
+    it('turns literal tab, CR and LF in attribute values into spaces (3.3.3)', () => {
+        const node = parse('<a v="x\ty\nz\r\nw\rq" e=""/>')[0];
+        expect(node.v).toBe('x y z w q');
+        expect(node.e).toBe('');
+    });
+
+    it('normalises every attribute and text run in a multi-line document', () => {
+        const pieces = ['x', 'y\nz', '\t', 'a\r\nb', 'plain', '\r', 'q w'];
+        let xml = '<r>\n';
+        const expected: string[] = [];
+        for (let k = 0; k < 60; k++) {
+            const v = pieces[k % pieces.length];
+            const t = pieces[(k * 3) % pieces.length];
+            xml += `  <i\n    a="${v}" b='${t}'>${t}</i>\r\n`;
+            expected.push(v.replace(/\r\n|[\t\n\r]/g, ' '), t.replace(/\r\n|[\t\n\r]/g, ' '), t.replace(/\r\n?/g, '\n'));
+        }
+        xml += '</r>';
+        for (const chunk of [xml.length, 7, 1]) {
+            const parser = new XmlParser();
+            for (let at = 0; at < xml.length; at += chunk) {
+                parser.write(xml.slice(at, at + chunk));
+            }
+            const got = parser.end()[0].children!.flatMap((i: any) => [i.a, i.b, i.text]);
+            expect(got).toEqual(expected);
+        }
+    });
+
+    it('keeps whitespace written as character references in attribute values', () => {
+        expect(parse('<a v="x&#9;y&#10;z&#13;"/>')[0].v).toBe('x\ty\nz\r');
+    });
+});
+
 describe('XmlParser progressive events', () => {
     it('emits open and close events with parent nodes', () => {
         const parser = new XmlParser({ progressive: true });
