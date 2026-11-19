@@ -117,6 +117,37 @@ describe('XmlParser structural parsing', () => {
     });
 });
 
+describe('reserved attribute names', () => {
+    it('does not throw on an attribute named children', () => {
+        const root = parse('<a children="x"><b/></a>')[0];
+        expect(root.children.map((node: any) => node.tagName)).toEqual(['b']);
+    });
+
+    it('keeps tagName, children and text as parser fields', () => {
+        expect(parse('<a tagName="y"/>')[0].tagName).toBe('a');
+        expect(parse('<a children="x"/>')[0].children).toBeUndefined();
+        expect(parse('<a text="t"/>')[0].text).toBeUndefined();
+        expect(parse('<a text="t">body</a>')[0].text).toBe('body');
+    });
+
+    it('stores __proto__ as data without changing the prototype', () => {
+        const node = parse('<a __proto__="x" constructor="c"/>')[0];
+        expect(Object.getPrototypeOf(node)).toBe(Object.prototype);
+        expect(Object.getOwnPropertyDescriptor(node, '__proto__')?.value).toBe('x');
+        expect(node.constructor).toBe('c');
+    });
+
+    it('drops reserved names in a tag split across chunks', () => {
+        const parser = new XmlParser();
+        parser.write('<a tag');
+        parser.write('Name="y" chil');
+        parser.write('dren="x"><b/></a>');
+        const root = parser.end()[0];
+        expect(root.tagName).toBe('a');
+        expect(root.children).toHaveLength(1);
+    });
+});
+
 describe('CDATA', () => {
     it('returns the content without the wrapper', () => {
         expect(parse('<r><a><![CDATA[keep <this> & that]]></a></r>')[0].children![0].text)
