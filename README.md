@@ -5,9 +5,9 @@ xml-event-parser
 and path-based events in one pass.
 
 - **Bounded memory**: keep only the element you are reading. A 240 MB report
-  parses in 81 MiB of RSS.
-- **Fast**: ~3.7x `sax` and ~4x `fast-xml-parser` on the same report.
-- **Portable**: 6.4 KiB minified / 2.2 KiB gzipped, zero dependencies, no
+  parses in 82 MiB of RSS.
+- **Fast**: ~3.7x `sax` and ~5x `fast-xml-parser` on the same report.
+- **Portable**: 9.0 KiB minified / 3.2 KiB gzipped, zero dependencies, no
   `node:*` imports in the core entry, no `eval`.
 - **One pass, two views**: a tree node and an `open`/`close` event per element.
 
@@ -28,9 +28,9 @@ Generated JUnit reports, each parser in its own process capped at 512 MB of heap
 
 | parser | 60 MB report | 240 MB report |
 | --- | --- | --- |
-| **xml-event-parser** | **0.27 s, 65 MiB** | **1.03 s, 81 MiB** |
-| sax | 0.96 s, 67 MiB | 3.80 s, 79 MiB |
-| fast-xml-parser | 1.52 s, 637 MiB | **out of memory** |
+| **xml-event-parser** | **0.27 s, 67 MiB** | **1.00 s, 82 MiB** |
+| sax | 0.95 s, 67 MiB | 3.71 s, 79 MiB |
+| fast-xml-parser | 1.56 s, 648 MiB | **out of memory** |
 
 The file grows 4x; the heap does not.
 
@@ -198,9 +198,9 @@ nesting), against `txml`, `fast-xml-parser`, `sax` and `htmlparser2`:
 
 | workload | xml-event-parser | txml | fast-xml-parser | sax | htmlparser2 |
 | --- | --- | --- | --- | --- | --- |
-| tree (parse + walk) | **26.0 ms, 230 MB/s** | 50.6 ms, 118 MB/s | 167.8 ms, 36 MB/s | — | — |
-| element callbacks | **27.8 ms, 215 MB/s** | — | — | 100.0 ms, 60 MB/s | 44.9 ms, 133 MB/s |
-| streamed, 64 KiB chunks | **27.3 ms, 219 MB/s** | 77.4 ms, 77 MB/s | — | 103.3 ms, 58 MB/s | 50.8 ms, 118 MB/s |
+| tree (parse + walk) | **31.4 ms, 190 MB/s** | 51.0 ms, 117 MB/s | 170.0 ms, 35 MB/s | — | — |
+| element callbacks | **32.5 ms, 184 MB/s** | — | — | 97.8 ms, 61 MB/s | 45.6 ms, 131 MB/s |
+| streamed, 64 KiB chunks | **29.2 ms, 205 MB/s** | 80.7 ms, 74 MB/s | — | 102.3 ms, 58 MB/s | 54.6 ms, 109 MB/s |
 
 Full tables, methodology and caveats: [`bench/RESULTS.md`](bench/RESULTS.md).
 

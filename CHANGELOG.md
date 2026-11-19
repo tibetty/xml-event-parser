@@ -7,6 +7,12 @@ contain breaking changes; they are listed under "Upgrading".
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
+Correctness and hardening release. It fixes a crash, a memory exhaustion on deep nesting, and
+several XML 1.0 deviations. `createStream` now detects the document encoding. See "Upgrading"
+for the behaviour changes.
+
 ### Upgrading
 
 - Node.js 22 or newer is required for the `xml-event-parser/stream` entry and for development.
@@ -15,7 +21,15 @@ contain breaking changes; they are listed under "Upgrading".
   `'</a.b>'`. Such a listener never fired before.
 - Output changes for input that hits a fixed defect: `&#0;` and other references to characters
   XML forbids are kept as written instead of decoded, line endings become `\n`, and a literal
-  tab or newline in an attribute value becomes a space.
+  tab or newline in an attribute value becomes a space. A `<` that does not start a name is
+  text, and an element whose only content is a comment or PI has no `text` field.
+
+### Added
+
+- `createStream` detects the document's encoding: a UTF-8 or UTF-16 byte-order mark, the UTF-16
+  `<?` pattern, or the `encoding` in the XML declaration. Any encoding `TextDecoder` supports
+  works, and an unsupported one fails the stream. Previously, every input was decoded as UTF-8
+  ([#6]).
 
 ### Fixed
 
@@ -45,6 +59,8 @@ contain breaking changes; they are listed under "Upgrading".
 - Parsing without listeners or `keep` builds no path strings: 15-20% faster on the JUnit and
   deep-nesting benchmark shapes ([#19]).
 - Corner-case, differential (against `sax`) and W3C conformance tests ([#11]).
+- The core entry is 9.0 KiB minified and 3.2 KiB gzipped, up from 6.4 KiB and 2.2 KiB, for the
+  validation and normalisation above.
 - CI tests Node 22, 24 and 26, enforces a coverage floor, and checks the package with `publint`
   and `attw` ([#9]).
 
@@ -93,7 +109,8 @@ First release, extracted from [osm2geojson-lite](https://github.com/tibetty/osm2
 - Conditioned event paths, which needed `new Function`, are removed: the parser contains no
   `eval`.
 
-[Unreleased]: https://github.com/tibetty/xml-event-parser/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/tibetty/xml-event-parser/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tibetty/xml-event-parser/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/tibetty/xml-event-parser/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/tibetty/xml-event-parser/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/tibetty/xml-event-parser/compare/v0.1.1...v0.2.0
@@ -104,6 +121,7 @@ First release, extracted from [osm2geojson-lite](https://github.com/tibetty/osm2
 [#3]: https://github.com/tibetty/xml-event-parser/issues/3
 [#4]: https://github.com/tibetty/xml-event-parser/issues/4
 [#5]: https://github.com/tibetty/xml-event-parser/issues/5
+[#6]: https://github.com/tibetty/xml-event-parser/issues/6
 [#9]: https://github.com/tibetty/xml-event-parser/issues/9
 [#11]: https://github.com/tibetty/xml-event-parser/issues/11
 [#19]: https://github.com/tibetty/xml-event-parser/issues/19
