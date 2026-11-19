@@ -8,10 +8,10 @@ export default defineConfig({
             reporter: ['text', 'lcov'],
             // The floor sits at today's coverage; raise it as tests land, never lower it.
             thresholds: {
-                statements: 98,
-                branches: 95,
+                statements: 99,
+                branches: 96,
                 functions: 100,
-                lines: 98,
+                lines: 99,
             },
         },
     },

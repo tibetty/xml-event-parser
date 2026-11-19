@@ -14,6 +14,7 @@ npm ci
 | `npm run coverage` | unit tests with the coverage floor in `vitest.config.ts` |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run build` | `dist/index.{mjs,cjs,d.mts,d.cts}` and `dist/stream.{mjs,cjs,d.mts,d.cts}` |
+| `npm run conformance:data` | download the W3C XML Conformance Test Suite into `.cache/` (gitignored) for `test/conformance.test.ts` |
 | `npm run check:package` | `publint` and `attw`: exports and types resolve for ESM and CommonJS consumers |
 | `npm run bench:data` | generate the ~27 MiB speed corpus (gitignored) |
 | `npm run bench` | speed against `txml`, `sax`, `htmlparser2`, `fast-xml-parser` |
@@ -25,12 +26,17 @@ reproduced without trusting them.
 
 ## Tests
 
-`test/xmlparser.test.ts` covers the scanner (structure, entities, CDATA,
-truncation, events, retention) including an equivalence sweep that parses a
-document at every split point and in 1-13 byte chunks.
-`test/stream.test.ts` covers the Node stream adapter: chunk splits, multibyte
-characters split across chunks, and the core entry staying free of `node:*`
-imports.
+| file | covers |
+| --- | --- |
+| `test/xmlparser.test.ts` | the scanner: structure, entities, CDATA, truncation, events, retention, deep nesting, and a sweep that parses a document at every split point and in 1-13 byte chunks |
+| `test/corner-cases.test.ts` | attributes, a `<` that is not markup, truncation inside each construct, prolog and doctype |
+| `test/differential.test.ts` | 400 seeded random documents, whole and in random chunks, must give the same tree as `sax`; a failure names the seed |
+| `test/conformance.test.ts` | James Clark's xmltest `valid/sa` from the W3C suite, against the canonical forms. Skipped until `npm run conformance:data` has run; CI runs it with `XMLTS_REQUIRED=1` |
+| `test/stream.test.ts` | the Node stream adapter: chunk splits, multibyte characters split across chunks, and the core entry staying free of `node:*` imports |
+
+The W3C suite is downloaded, not vendored: its licence allows redistribution
+only as the unmodified archive. Documents whose DTD declares entities or
+attribute lists are out of scope, because the parser does not read DTDs.
 
 Add a failing test before fixing a bug. Keep the split-point sweep honest: a
 streaming change that only works on chunk boundaries the test happens to use is

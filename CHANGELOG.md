@@ -33,6 +33,10 @@ contain breaking changes; they are listed under "Upgrading".
 - Deep nesting cost quadratic time and memory: 100,000 levels (300 KB of input) exhausted a
   4 GB heap. Path strings are now built and looked up only down to the deepest watched or kept
   path, so 100,000 levels parse in about 20 ms ([#19]).
+- A `<` that does not start a name, as in `1 < 2` or `x<</a>`, opened an element with an empty or
+  bogus name and could swallow the tags after it. It is now text ([#11]).
+- An unterminated close tag at end of input (`<a>t</a`) leaked into the text, and a declaration
+  such as `<!DOCTYPE …>` inside a text-only element was kept as text ([#11]).
 - `require('xml-event-parser')` resolved to ESM type declarations. The package ships `.d.cts`
   and `.d.mts` declarations and names each in the export map ([#9]).
 
@@ -40,6 +44,7 @@ contain breaking changes; they are listed under "Upgrading".
 
 - Parsing without listeners or `keep` builds no path strings: 15-20% faster on the JUnit and
   deep-nesting benchmark shapes ([#19]).
+- Corner-case, differential (against `sax`) and W3C conformance tests ([#11]).
 - CI tests Node 22, 24 and 26, enforces a coverage floor, and checks the package with `publint`
   and `attw` ([#9]).
 
@@ -100,4 +105,5 @@ First release, extracted from [osm2geojson-lite](https://github.com/tibetty/osm2
 [#4]: https://github.com/tibetty/xml-event-parser/issues/4
 [#5]: https://github.com/tibetty/xml-event-parser/issues/5
 [#9]: https://github.com/tibetty/xml-event-parser/issues/9
+[#11]: https://github.com/tibetty/xml-event-parser/issues/11
 [#19]: https://github.com/tibetty/xml-event-parser/issues/19

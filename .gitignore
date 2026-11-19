@@ -3,3 +3,4 @@ dist/
 bench/data/
 coverage/
 *.tgz
+.cache/

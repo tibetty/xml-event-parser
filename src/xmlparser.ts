@@ -163,6 +163,12 @@ function decodeContent(raw: string, hasCR: boolean): string {
                 return out;
             }
             at = end + 2;
+        } else if (raw.charCodeAt(lt + 1) === 33) { // '!': a doctype or other declaration
+            end = raw.indexOf('>', lt + 2);
+            if (end < 0) {
+                return out;
+            }
+            at = end + 1;
         } else {
             out += '<';
             at = lt + 1;
@@ -213,6 +219,15 @@ function normalizePath(path: string): string {
 
 /** `'<a.b>'` or `'</a.b>'`: non-empty dotted segments without spaces or markup. */
 const EVENT_NAME = /^<\/?[^\s<>/.]+(?:\.[^\s<>/.]+)*>$/;
+
+/**
+ * Whether `c` can start an XML name (§2.3 `NameStartChar`, with every non-ASCII
+ * code unit accepted). A `<` followed by anything else is text, so `1 < 2`
+ * stays text instead of opening an element with an empty name.
+ */
+function isNameStart(c: number): boolean {
+    return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c === 95 || c === 58 || c >= 0x80;
+}
 
 function isSpace(c: number): boolean {
     return c === SPACE || c === TAB || c === LF || c === CR;
@@ -491,14 +506,14 @@ export class XmlParser {
             const c = xml.charCodeAt(i);
 
             if (c === SLASH) {
-                // closing tag: </tag>
-                const gt = xml.indexOf('>', i);
+                // closing tag: </tag>; at end of input an unterminated one
+                // still closes the element, so '<a>t</a' reads as 't'.
+                let gt = xml.indexOf('>', i);
                 if (gt < 0) {
                     if (!final) {
                         break;
                     }
-                    i = len;
-                    break;
+                    gt = len - 1;
                 }
                 const frame = this.stack.pop();
                 i = gt + 1;
@@ -569,6 +584,12 @@ export class XmlParser {
                     break;
                 }
                 i = end;
+                pending = -1;
+                continue;
+            }
+
+            if (!isNameStart(c)) {
+                // not markup: the '<' stays in the text run
                 pending = -1;
                 continue;
             }
