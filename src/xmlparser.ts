@@ -15,21 +15,56 @@ export interface XmlNode {
 /** Listener signature for the path-based events. */
 export type XmlListener = (node: XmlNode, parent?: XmlNode) => void;
 
-/** Decode one entity name (between `&` and `;`), or `null` if it is not one. */
-function decodeEntity(name: string): string | null {
-    switch (name) {
+/** XML 1.0 `Char`: the code points a character reference may name (§2.2, §4.1). */
+function isXmlChar(code: number): boolean {
+    return code >= 0x20
+        ? code <= 0xD7FF || (code >= 0xE000 && code <= 0xFFFD) || (code >= 0x10000 && code <= 0x10FFFF)
+        : code === 0x9 || code === 0xA || code === 0xD;
+}
+
+/**
+ * Decode one character reference body (between `&#` and `;`), or `null` when
+ * the digits are malformed or name a character XML forbids.
+ */
+function decodeCharRef(value: string, from: number, to: number): string | null {
+    let code = 0;
+    const x = value.charCodeAt(from);
+    const hex = x === 120 || x === 88; // 'x', or 'X' as browsers accept
+    let i = hex ? from + 1 : from;
+    if (i >= to) {
+        return null;
+    }
+    for (; i < to; i++) {
+        const c = value.charCodeAt(i);
+        let digit: number;
+        if (c >= 48 && c <= 57) {
+            digit = c - 48;
+        } else if (hex && c >= 97 && c <= 102) {
+            digit = c - 87;
+        } else if (hex && c >= 65 && c <= 70) {
+            digit = c - 55;
+        } else {
+            return null;
+        }
+        code = code * (hex ? 16 : 10) + digit;
+        if (code > 0x10FFFF) {
+            return null;
+        }
+    }
+    return isXmlChar(code) ? String.fromCodePoint(code) : null;
+}
+
+/** Decode one entity (between `&` and `;`), or `null` if it is not one. */
+function decodeEntity(value: string, from: number, to: number): string | null {
+    if (value.charCodeAt(from) === 35) { // '#'
+        return decodeCharRef(value, from + 1, to);
+    }
+    switch (value.slice(from, to)) {
         case 'amp': return '&';
         case 'lt': return '<';
         case 'gt': return '>';
         case 'quot': return '"';
         case 'apos': return "'";
-    }
-    if (name.charCodeAt(0) === 35) { // '#'
-        const hex = name.charCodeAt(1) === 120 || name.charCodeAt(1) === 88; // 'x' or 'X'
-        const code = hex ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
-        if (Number.isFinite(code) && code >= 0 && code <= 0x10FFFF) {
-            return String.fromCodePoint(code);
-        }
     }
     return null;
 }
@@ -39,31 +74,35 @@ function decodeEntity(name: string): string | null {
  *
  * A manual scan beats `String.replace` with a callback by ~2.5x on OSM-sized
  * attribute values: no regex, no match object and no per-entity closure. The
- * `indexOf` guard keeps entity-free values allocation-free, and unknown
- * entities are left exactly as written.
+ * `indexOf` guard keeps entity-free values allocation-free. An `&` that does
+ * not start a well-formed reference is kept as written, and the scan resumes
+ * at the next `&`, so `AT&T &lt;` still decodes the `&lt;`.
  */
 export function decodeEntities(value: string): string {
     let at = value.indexOf('&');
     if (at < 0) {
         return value;
     }
-    let out = value.slice(0, at);
-    while (at < value.length) {
-        const semi = value.indexOf(';', at + 1);
-        if (semi < 0) {
-            out += value.slice(at);
-            break;
+    let out = '';
+    let copied = 0;
+    let semi = -1;
+    while (at >= 0) {
+        if (semi <= at) {
+            semi = value.indexOf(';', at + 1);
+            if (semi < 0) {
+                break;
+            }
         }
-        const decoded = decodeEntity(value.slice(at + 1, semi));
-        out += decoded === null ? value.slice(at, semi + 1) : decoded;
-        at = value.indexOf('&', semi + 1);
-        if (at < 0) {
-            out += value.slice(semi + 1);
-            break;
+        const decoded = decodeEntity(value, at + 1, semi);
+        if (decoded === null) {
+            at = value.indexOf('&', at + 1);
+            continue;
         }
-        out += value.slice(semi + 1, at);
+        out += value.slice(copied, at) + decoded;
+        copied = semi + 1;
+        at = value.indexOf('&', copied);
     }
-    return out;
+    return copied === 0 ? value : out + value.slice(copied);
 }
 
 /**
