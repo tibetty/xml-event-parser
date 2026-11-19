@@ -23,9 +23,41 @@ describe('decodeEntities', () => {
         expect(decodeEntities('&#x;')).toBe('&#x;');
     });
 
-    it('decodes NUL and mixed content', () => {
-        expect(decodeEntities('&#0;')).toBe('\u0000');
+    it('decodes mixed content', () => {
         expect(decodeEntities('a&amp;&#65;&bogus;z')).toBe('a&A&bogus;z');
+    });
+
+    it('keeps a bare ampersand and decodes the entities after it', () => {
+        expect(decodeEntities('AT&T &lt;b&gt;')).toBe('AT&T <b>');
+        expect(decodeEntities('& a &amp; b')).toBe('& a & b');
+        expect(decodeEntities('a && b &amp;')).toBe('a && b &');
+        expect(decodeEntities('tail &')).toBe('tail &');
+        expect(decodeEntities('&&amp;')).toBe('&&');
+    });
+
+    it('keeps numeric references with malformed digits as written', () => {
+        for (const ref of ['&#12abc;', '&#+5;', '&#-5;', '&# 5;', '&#x+41;', '&#xG;', '&#;', '&#x;', '&#5.0;']) {
+            expect(decodeEntities(ref)).toBe(ref);
+        }
+    });
+
+    it('keeps references to characters XML forbids as written', () => {
+        for (const ref of ['&#0;', '&#x8;', '&#xB;', '&#x1F;', '&#xD800;', '&#xDFFF;', '&#xFFFE;', '&#xFFFF;', '&#x110000;']) {
+            expect(decodeEntities(ref)).toBe(ref);
+        }
+    });
+
+    it('decodes the boundaries of the legal character ranges', () => {
+        expect(decodeEntities('&#x9;&#xA;&#xD;&#x20;')).toBe('\t\n\r ');
+        expect(decodeEntities('&#xD7FF;&#xE000;&#xFFFD;')).toBe('\uD7FF\uE000\uFFFD');
+        expect(decodeEntities('&#x10000;&#x10FFFF;')).toBe('\u{10000}\u{10FFFF}');
+        expect(decodeEntities('&#x00041;&#0065;')).toBe('AA');
+    });
+
+    it('decodes entities in attributes and text', () => {
+        const root = parse('<a v="AT&T &amp; co">x &lt; y & z</a>')[0];
+        expect(root.v).toBe('AT&T & co');
+        expect(root.text).toBe('x < y & z');
     });
 });
 
