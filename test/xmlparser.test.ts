@@ -384,6 +384,59 @@ describe('XmlParser progressive events', () => {
     });
 });
 
+describe('deep nesting', () => {
+    const depth = 100000;
+
+    it('parses 100k levels without listeners in linear time', () => {
+        const started = performance.now();
+        const roots = parse('<d>'.repeat(depth) + 'x');
+        expect(roots).toHaveLength(1);
+        expect(performance.now() - started).toBeLessThan(2000);
+    });
+
+    it('parses 100k closed levels with a shallow listener and keep', () => {
+        const parser = new XmlParser({ progressive: true, retain: 'none', keep: ['d.d'] });
+        let closed = 0;
+        let opened = 0;
+        parser.on('</d.d.d>', () => closed++);
+        parser.on('<d.d.d>', () => opened++);
+        const started = performance.now();
+        parser.parse('<d>'.repeat(depth) + '</d>'.repeat(depth));
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect([opened, closed]).toEqual([1, 1]);
+    });
+
+    it('still emits events at the watched depth below untracked siblings', () => {
+        const parser = new XmlParser({ progressive: true });
+        const seen: string[] = [];
+        parser.on('</r.a.b>', (node) => seen.push(node.id));
+        parser.on('<r.a.b>', (node) => seen.push('open:' + node.id));
+        parser.parse('<r><a><b id="1"><c><d><e/></d></c></b><b id="2"/></a><x><a><b id="3"/></a></x></r>');
+        expect(seen).toEqual(['open:1', '1', 'open:2', '2']);
+    });
+
+    it('tracks paths for open elements when a deeper listener is added mid-stream', () => {
+        const parser = new XmlParser({ progressive: true });
+        const seen: string[] = [];
+        parser.on('</r>', () => seen.push('r'));
+        parser.write('<r><a><b>');
+        parser.on('</r.a.b.c>', (node) => seen.push('c:' + node.id));
+        parser.on('</c>', () => seen.push('wrong'));
+        parser.on('</r.a.b>', () => seen.push('b'));
+        parser.write('<c id="1"/><c id="2"></c></b></a></r>');
+        parser.end();
+        expect(seen).toEqual(['c:1', 'c:2', 'b', 'r']);
+    });
+
+    it('counts a parse() dir prefix toward the watched depth', () => {
+        const parser = new XmlParser({ progressive: true });
+        const seen: string[] = [];
+        parser.on('</base.root.a>', (node) => seen.push(node.tagName));
+        parser.parse('<root><a/><a></a><b><a/></b></root>', { tagName: 'host' }, 'base');
+        expect(seen).toEqual(['a', 'a']);
+    });
+});
+
 describe('event names', () => {
     it('rejects names that are not in bracketed form', () => {
         const parser = new XmlParser({ progressive: true });

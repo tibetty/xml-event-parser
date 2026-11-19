@@ -30,11 +30,16 @@ contain breaking changes; they are listed under "Upgrading".
 - XML 1.0 end-of-line handling (§2.11) and attribute-value normalisation (§3.3.3) ([#4]).
 - An event name that is not in bracketed form, such as `'a.b'`, registered a listener that
   never fired. Removing the last listener of a path stops the scanner watching it ([#5]).
+- Deep nesting cost quadratic time and memory: 100,000 levels (300 KB of input) exhausted a
+  4 GB heap. Path strings are now built and looked up only down to the deepest watched or kept
+  path, so 100,000 levels parse in about 20 ms ([#19]).
 - `require('xml-event-parser')` resolved to ESM type declarations. The package ships `.d.cts`
   and `.d.mts` declarations and names each in the export map ([#9]).
 
 ### Changed
 
+- Parsing without listeners or `keep` builds no path strings: 15-20% faster on the JUnit and
+  deep-nesting benchmark shapes ([#19]).
 - CI tests Node 22, 24 and 26, enforces a coverage floor, and checks the package with `publint`
   and `attw` ([#9]).
 
@@ -95,3 +100,4 @@ First release, extracted from [osm2geojson-lite](https://github.com/tibetty/osm2
 [#4]: https://github.com/tibetty/xml-event-parser/issues/4
 [#5]: https://github.com/tibetty/xml-event-parser/issues/5
 [#9]: https://github.com/tibetty/xml-event-parser/issues/9
+[#19]: https://github.com/tibetty/xml-event-parser/issues/19

@@ -186,6 +186,18 @@ const TAB = 9;
 const LF = 10;
 const CR = 13;
 
+/** Number of dotted segments in a path: `'a.b'` is 2, `''` is 0. */
+function segments(path: string): number {
+    if (path.length === 0) {
+        return 0;
+    }
+    let count = 1;
+    for (let at = path.indexOf('.'); at >= 0; at = path.indexOf('.', at + 1)) {
+        count++;
+    }
+    return count;
+}
+
 /** `'</a.b>'` and `'a.b'` both normalise to `'a.b'`. */
 function normalizePath(path: string): string {
     let start = 0;
@@ -224,7 +236,14 @@ function setAttribute(node: XmlNode, name: string, value: string): void {
 
 interface Frame {
     node: XmlNode;
+    /**
+     * Dotted path from the root. Built only when `depth` is within
+     * `XmlParser.pathDepth`; deeper frames hold `''`, because no listener or
+     * `keep` path can match them.
+     */
     fullTag: string;
+    /** Number of segments in this frame's path, counting a `parse()` dir prefix. */
+    depth: number;
     textStart: number;
     /** Retained subtree: this element or an ancestor matched `keep`. */
     keep?: boolean;
@@ -294,6 +313,15 @@ export class XmlParser {
     private watchedPaths: Set<string> = new Set();
     private watchedChildren: Map<string, Set<string>> = new Map();
     private watchedTopLevel: Set<string> = new Set();
+    /**
+     * Segments in the deepest watched or kept path. Elements deeper than this
+     * build no path string and skip every lookup, so a deeply nested document
+     * costs O(depth) rather than O(depth²): each lookup would flatten a path
+     * string as long as the depth.
+     */
+    private pathDepth: number = 0;
+    /** Segments in the `parse()` dir prefix. */
+    private baseDepth: number = 0;
 
     /** Input not consumed yet: pending text plus any construct split by a chunk. */
     private buffer: string = '';
@@ -324,7 +352,9 @@ export class XmlParser {
             }
             if (opts.keep) {
                 for (const path of opts.keep) {
-                    this.keepPaths.add(normalizePath(path));
+                    const normalized = normalizePath(path);
+                    this.keepPaths.add(normalized);
+                    this.pathDepth = Math.max(this.pathDepth, segments(normalized));
                 }
             }
         }
@@ -393,7 +423,8 @@ export class XmlParser {
         this.stack = [];
         this.roots = [];
         this.basePath = dir ? dir : '';
-        this.top = parent ? { node: parent, fullTag: this.basePath, textStart: 0 } : undefined;
+        this.baseDepth = segments(this.basePath);
+        this.top = parent ? { node: parent, fullTag: this.basePath, depth: this.baseDepth, textStart: 0 } : undefined;
         this.rootOwner = this.top;
         this.parentMap = new WeakMap();
         this.active = true;
@@ -407,6 +438,7 @@ export class XmlParser {
         this.top = undefined;
         this.rootOwner = undefined;
         this.basePath = '';
+        this.baseDepth = 0;
         this.active = false;
     }
 
@@ -485,7 +517,7 @@ export class XmlParser {
                     }
                 }
 
-                if (progressive && this.watchedPaths.has(frame.fullTag)) {
+                if (progressive && frame.depth <= this.pathDepth && this.watchedPaths.has(frame.fullTag)) {
                     this.emit('</' + frame.fullTag + '>', node, parentNode);
                 }
 
@@ -557,8 +589,10 @@ export class XmlParser {
 
             // '?'/'!' prefixed tags were already routed above; treat trailing
             // '/' (and the implicitly self-closing prolog tags) as leaves.
+            const depth = (this.top ? this.top.depth : this.baseDepth) + 1;
+            const tracked = depth <= this.pathDepth;
             if (opened.selfClose) {
-                if (progressive) {
+                if (progressive && tracked) {
                     const parentTag = this.top ? this.top.fullTag : this.basePath;
                     const watched = parentTag
                         ? this.watchedChildren.get(parentTag)
@@ -578,14 +612,20 @@ export class XmlParser {
                 continue;
             }
 
-            const fullTag = this.top
-                ? (this.top.fullTag ? this.top.fullTag + '.' + tag : tag)
-                : (this.basePath ? this.basePath + '.' + tag : tag);
-            if (hasOpenListeners && this.watchedPaths.has(fullTag)) {
-                this.emit('<' + fullTag + '>', node, parentNode);
+            let fullTag = '';
+            let keep = this.top !== undefined && this.top.keep === true;
+            if (tracked) {
+                fullTag = this.top
+                    ? (this.top.fullTag ? this.top.fullTag + '.' + tag : tag)
+                    : (this.basePath ? this.basePath + '.' + tag : tag);
+                if (hasOpenListeners && this.watchedPaths.has(fullTag)) {
+                    this.emit('<' + fullTag + '>', node, parentNode);
+                }
+                if (!keep && this.keepPaths.size > 0) {
+                    keep = this.keepPaths.has(fullTag);
+                }
             }
-            const keep = (this.top !== undefined && this.top.keep === true) || this.keepPaths.has(fullTag);
-            const frame: Frame = { node, fullTag, textStart: i, keep };
+            const frame: Frame = { node, fullTag, depth, textStart: i, keep };
             this.stack.push(frame);
             this.top = frame;
         }
@@ -744,6 +784,25 @@ export class XmlParser {
         }
     }
 
+    /**
+     * Build the missing paths of open elements after `pathDepth` grows, so a
+     * listener added between `write()` calls sees elements that are already
+     * open. Only frames within the new depth are touched.
+     */
+    private retrack(): void {
+        let parentTag = this.rootOwner ? this.rootOwner.fullTag : this.basePath;
+        for (let k = 0; k < this.stack.length; k++) {
+            const frame = this.stack[k];
+            if (frame.depth > this.pathDepth) {
+                break;
+            }
+            if (frame.fullTag === '') {
+                frame.fullTag = parentTag ? parentTag + '.' + frame.node.tagName : frame.node.tagName;
+            }
+            parentTag = frame.fullTag;
+        }
+    }
+
     /** Whether `buffer[from, to)` holds the control character `code`. */
     private has(code: number, from: number, to: number): boolean {
         const slot = code === TAB ? 0 : code === LF ? 1 : 2;
@@ -818,6 +877,11 @@ export class XmlParser {
         if (evt.charCodeAt(0) === LT) {
             const path = evt.slice(evt.charCodeAt(1) === SLASH ? 2 : 1, evt.length - 1);
             this.watchedPaths.add(path);
+            const depth = segments(path);
+            if (depth > this.pathDepth) {
+                this.pathDepth = depth;
+                this.retrack();
+            }
             const dot = path.lastIndexOf('.');
             if (dot < 0) {
                 this.watchedTopLevel.add(path);
